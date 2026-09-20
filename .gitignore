@@ -1,0 +1,27 @@
+# Build binaries and artifacts
+bin/
+*.bin
+*.manifest
+*.buildinfo
+sha256sums
+*.apk
+*.ipk
+*.tar.gz
+
+# Local build / staging directories if running locally
+build_dir/
+staging_dir/
+dl/
+feeds/
+package/feeds/
+.config*
+tmp/
+logs/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db

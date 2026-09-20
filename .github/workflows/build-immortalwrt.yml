@@ -1,0 +1,158 @@
+name: Build ImmortalWrt H5000M Firmware
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      upload_release:
+        description: 'Upload firmware to GitHub Release'
+        required: false
+        default: 'true'
+        type: boolean
+  schedule:
+    - cron: '0 18 * * 1' # Weekly build every Tuesday at 02:00 UTC+8
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/**'
+      - 'patches/**'
+      - 'scripts/**'
+      - '.github/workflows/build-immortalwrt.yml'
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-25.12
+  CONFIG_FILE: config/h5000m.config
+  DIY_P1_SH: scripts/diy-part1.sh
+  DIY_P2_SH: scripts/diy-part2.sh
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Free Disk Space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+    - name: Initialize Build Environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib \
+          g++-multilib git gnutls-bin gperf haveged help2man intltool libelf-dev libfuse-dev \
+          libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev \
+          libreadline-dev libssl-dev libtool lld llvm lrzsz msmtp nano ninja-build p7zip p7zip-full patch \
+          pkgconf python3 python3-pip python3-ply python3-docutils qemu-utils rsync scons squashfs-tools subversion \
+          swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown -R $(id -u):$(id -g) /workdir
+
+    - name: Clone ImmortalWrt Source
+      working-directory: /workdir
+      run: |
+        df -h
+        git clone --depth 1 -b $REPO_BRANCH $REPO_URL openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Load Custom Feeds (DIY Part 1)
+      run: |
+        [ -e $DIY_P1_SH ] && chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: Update & Install Feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Load Custom Configuration and Patches (DIY Part 2)
+      run: |
+        [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
+        [ -e $DIY_P2_SH ] && chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
+        make defconfig
+
+    - name: Download Package Sources
+      run: |
+        cd openwrt
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile Firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Check Free Space
+      if: (!cancelled())
+      run: df -h
+
+    - name: Organize Firmware Files
+      id: organize
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload Firmware to Artifacts
+      uses: actions/upload-artifact@v4
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: ImmortalWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: Generate Release Tag
+      id: tag
+      if: (github.event.inputs.upload_release == 'true' || github.event_name == 'schedule') && steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        echo "release_tag=ImmortalWrt-H5000M-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+        touch release.txt
+        echo "## 🚀 ImmortalWrt 25.12 for Hiveton H5000M" >> release.txt
+        echo "- **Target**: MediaTek Filogic 880 / MT7987A (Hiveton H5000M)" >> release.txt
+        echo "- **Kernel**: Linux 6.12" >> release.txt
+        echo "- **Included Plugins**:" >> release.txt
+        echo "  - \`luci-app-h5000m-fancontrol\` (with userspace DTS patch)" >> release.txt
+        echo "  - \`luci-app-mt5700m\` (with QModem 5G AT daemon & SMS tools)" >> release.txt
+        echo "  - \`luci-app-passwall\` (Sing-box 1.12.25 full + Xray-core + HAProxy + ChinaDNS-NG)" >> release.txt
+        echo "  - \`luci-app-mosdns\` (MosDNS 5.3.4 with adblock_set plugin + V2dat)" >> release.txt
+        echo "  - \`luci-app-openlist\` (OpenList 4.2.6 多存储文件列表管理)" >> release.txt
+        echo "  - \`luci-app-upnp\` (MiniUPnPd nftables)" >> release.txt
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload Firmware to GitHub Release
+      uses: softprops/action-gh-release@v2
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
