@@ -20,6 +20,28 @@
 
 ---
 
+## 📦 插件与核心组件来源声明 (Credits & Upstream Sources)
+
+本项目秉持开源共建理念，特此向所有被集成的优秀开源项目及其维护者致以崇高敬意。各插件与核心组件的源码来源及上游仓库声明如下：
+
+| 组件 / 插件名称 | 上游维护者 / 团队 | 上游项目仓库 | 核心功能与作用说明 |
+| :--- | :--- | :--- | :--- |
+| **ImmortalWrt 底包** | [ImmortalWrt Team](https://github.com/immortalwrt) | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) | 固件底包核心，基于 `openwrt-25.12` 分支与 Linux 6.12 内核 |
+| **H5000M 风扇控制** | [FAN789](https://github.com/FAN789) | [FAN789/luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol) | H5000M 专用风扇调速与多传感器综合温控插件 |
+| **MT5700M 5G 模块** | [FAN789](https://github.com/FAN789) | [FAN789/luci-app-mt5700m](https://github.com/FAN789/luci-app-mt5700m) | MT5700M 5G 模组状态监控、锁频、网络配置 Web 插件 |
+| **5G 模组后台服务** | [FUjr](https://github.com/FUjr) | [FUjr/QModem](https://github.com/FUjr/QModem) | 包含 `ubus-at-daemon` AT 指令守护与 `sms-tool_q` 短信工具 |
+| **OpenList 核心与插件** | [OpenListTeam](https://github.com/OpenListTeam) | [OpenListTeam/OpenList-OpenWRT](https://github.com/OpenListTeam/OpenList-OpenWRT)<br>[OpenListTeam/OpenList](https://github.com/OpenListTeam/OpenList) | 支持挂载各类网盘、WebDAV、本地存储与 FUSE 的聚合文件管理系统 |
+| **ANI-RSS 追番核心** | [wushuo894](https://github.com/wushuo894) | [wushuo894/ani-rss](https://github.com/wushuo894/ani-rss) | 基于 RSS 自动追番、订阅、下载、刮削与洗版主程序（Spring Boot） |
+| **ANI-RSS LuCI 插件** | [loong486](https://github.com/loong486) | [loong486/luci-app-ani-rss](https://github.com/loong486/luci-app-ani-rss) | 专为 OpenWrt 打造的纯原生 LuCI 插件（零 Docker，内置 musl JRE 助手） |
+| **MosDNS 防污染 DNS** | [sbwml](https://github.com/sbwml)<br>[IrineSistiana](https://github.com/IrineSistiana) | [sbwml/luci-app-mosdns](https://github.com/sbwml/luci-app-mosdns)<br>[IrineSistiana/mosdns](https://github.com/IrineSistiana/mosdns) | MosDNS v5 高性能 DNS 分流转发器、adblock_set 补丁与 Web 界面 |
+| **PassWall 网络加速** | [xiaorouji](https://github.com/xiaorouji) | [xiaorouji/openwrt-passwall](https://github.com/xiaorouji/openwrt-passwall) | OpenWrt 强大的多协议分流与代理管理工具 |
+| **sing-box 协议核心** | [SagerNet](https://github.com/SagerNet) | [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 新一代通用全协议通用网络代理核心 |
+| **Xray 代理核心** | [XTLS Team](https://github.com/XTLS) | [XTLS/Xray-core](https://github.com/XTLS/Xray-core) | 高性能 Xray 协议核心组件 |
+| **ChinaDNS-NG** | [zfl9](https://github.com/zfl9) | [zfl9/chinadns-ng](https://github.com/zfl9/chinadns-ng) | 高性能双栈防污染 DNS 智能分流工具 |
+| **MiniUPnPd** | [Thomas Bernard](https://github.com/miniupnp) | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | UPnP IGD 协议服务，支持现代 Linux Firewall4 (nftables) 映射 |
+
+---
+
 ## 📁 目录结构
 
 ```
@@ -28,13 +50,17 @@
 │       └── build-immortalwrt.yml    # GitHub Actions 自动化构建核心工作流
 ├── config/
 │   └── h5000m.config                # H5000M 纯净种子配置 (基于本地编译验证)
+├── package/
+│   └── luci-app-ani-rss/            # 原生追番插件源码 (内置 musl JRE 与核心管理)
 ├── patches/
 │   └── h5000m-userspace-fan-control.patch # 设备树 DTS 温控补丁
 ├── scripts/
 │   ├── diy-part1.sh                 # 自定义 Feeds 添加脚本 (QModem, MosDNS 等)
 │   └── diy-part2.sh                 # 源码克隆、补丁注入、源优先级修复脚本
+├── push_to_github.bat               # Windows 一键自动推送脚本 (智能识别远程)
+├── push_to_github.sh                # Linux / WSL 一键推送脚本
 ├── .gitignore                       # Git 忽略配置
-└── README.md                        # 项目说明文档
+└── README.md                        # 项目说明文档与开源致谢
 ```
 
 ---
@@ -48,10 +74,10 @@
 4. 点击 **「Create repository」**。
 
 ### 第二步：将本地项目推送到您的 GitHub 仓库
-在本地终端（或 WSL）中进入当前项目目录，执行以下命令：
+在 Windows 上，直接双击项目根目录下的 **`push_to_github.bat`** 脚本即可；或者在本地终端中执行：
 ```bash
 # 替换为您的 GitHub 仓库地址
-git remote add origin https://github.com/<您的用户名>/<您的仓库名>.git
+git remote set-url origin https://github.com/<您的用户名>/<您的仓库名>.git
 
 # 推送代码到 GitHub 的 main 分支
 git push -u origin main
@@ -64,8 +90,8 @@ git push -u origin main
 4. 点击 **Save**。
 
 ### 第四步：触发自动编译
+- **自动触发**：当您通过 `push_to_github.bat` 推送更新到 GitHub 时，GitHub Actions 将会自动触发构建。
 - **手动触发**：进入仓库页面顶部 **Actions** 标签页，点击左侧的 **「Build ImmortalWrt H5000M Firmware」**，然后点击右侧的 **「Run workflow」** 按钮即可。
-- **自动触发**：当您对 `config/`、`patches/` 或 `scripts/` 进行任何修改并 push 到 GitHub 时，GitHub Actions 将会自动触发构建。
 - **定时触发**：默认配置为每周定期检测构建，保持固件核心与规则最新。
 
 ### 第五步：下载固件
