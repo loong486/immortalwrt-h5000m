@@ -1,151 +1,166 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
-setlocal enabledelayedexpansion
 
 echo ================================================================
-echo             ImmortalWrt H5000M 固件工程 GitHub 一键推送脚本
+echo             ImmortalWrt H5000M 鍥轰欢宸ョ▼ GitHub 涓€閿帹閫佽剼鏈?
 echo ================================================================
 echo.
 
 cd /d "%~dp0"
 
-:: 检查 Git 或 WSL 环境
+:: 妫€鏌?Git
 where git >nul 2>&1
-if %errorlevel% equ 0 goto :env_ok
+if %errorlevel% equ 0 goto :has_git
 
+:: 妫€鏌?WSL
 wsl.exe -e true >nul 2>&1
 if %errorlevel% equ 0 goto :use_wsl
 
-echo [错误] 当前系统未检测到 Git 或 WSL 环境！
-echo 请任选以下一种方式安装后再运行本脚本：
-echo   1. 安装 Git for Windows: https://git-scm.com/download/win
-echo   2. 安装 WSL (在终端执行): wsl --install
+echo [閿欒] 褰撳墠绯荤粺鏈娴嬪埌 Git 鎴?WSL 鐜锛?
+echo 璇峰畨瑁?Git for Windows 鍚庨噸璇? https://git-scm.com/download/win
 echo.
 pause
 exit /b 1
 
 :use_wsl
-echo 正在通过 WSL 执行推送脚本...
+echo 姝ｅ湪璋冪敤 WSL 鐜鎵ц鎺ㄩ€?..
 wsl.exe bash ./push_to_github.sh %*
 pause
 exit /b 0
 
-:env_ok
-:: 检查或初始化本地仓库
+:has_git
 if not exist ".git" (
-    echo [1/4] 正在初始化本地 Git 仓库...
+    echo [1/4] 鍒濆鍖栨湰鍦?Git 浠撳簱...
     git init
 )
 
-:: 检查 Git 用户名配置
+:: 妫€鏌?Git 韬唤
 git config user.name >nul 2>&1
 if %errorlevel% neq 0 (
     git config user.name "loong486"
     git config user.email "loong486@users.noreply.github.com"
 )
 
-:: 获取已配置的远程地址
+:: 鑾峰彇杩滅▼婧?
 set "EXISTING_URL="
 for /f "tokens=*" %%i in ('git remote get-url origin 2^>nul') do set "EXISTING_URL=%%i"
 
-:: 确定推送目标地址
 set "REPO_URL=%~1"
-if not defined REPO_URL (
-    if defined EXISTING_URL (
-        echo [1/4] 检测到已关联的 GitHub 仓库:
-        echo       !EXISTING_URL!
-        echo.
-        set /p "INPUT_URL=请输入新的仓库地址 (直接回车保持默认): "
-        if "!INPUT_URL!"=="" (
-            set "REPO_URL=!EXISTING_URL!"
-        ) else (
-            set "REPO_URL=!INPUT_URL!"
-        )
-    ) else (
-        echo [1/4] 请配置远程 GitHub 仓库:
-        set /p "REPO_URL=请输入您的 GitHub 仓库地址: "
-    )
+if not "%REPO_URL%"=="" goto :setup_remote
+
+if not "%EXISTING_URL%"=="" (
+    echo [1/4] 妫€娴嬪埌宸插叧鑱旂殑 GitHub 浠撳簱:
+    echo       %EXISTING_URL%
+    echo.
+    set "INPUT_URL="
+    set /p "INPUT_URL=璇疯緭鍏ユ柊鐨勪粨搴撳湴鍧€ [鐩存帴鍥炶溅淇濇寔榛樿]: "
+) else (
+    echo [1/4] 璇烽厤缃繙绋?GitHub 浠撳簱:
+    set "INPUT_URL="
+    set /p "INPUT_URL=璇疯緭鍏ユ偍鐨?GitHub 浠撳簱鍦板潃: "
 )
 
-if not defined REPO_URL (
-    echo [错误] 未提供仓库地址，操作已中止。
+if "%INPUT_URL%"=="" (
+    set "REPO_URL=%EXISTING_URL%"
+) else (
+    set "REPO_URL=%INPUT_URL%"
+)
+
+if "%REPO_URL%"=="" (
+    echo [閿欒] 鏈彁渚涗粨搴撳湴鍧€锛屾搷浣滀腑姝€?
     pause
     exit /b 1
 )
 
-:: 设置默认分支与远程源
+:setup_remote
 git branch -M main >nul 2>&1
-if defined EXISTING_URL (
-    if not "!REPO_URL!"=="!EXISTING_URL!" (
-        git remote set-url origin "!REPO_URL!"
+if not "%EXISTING_URL%"=="" (
+    if not "%REPO_URL%"=="%EXISTING_URL%" (
+        git remote set-url origin "%REPO_URL%"
     )
 ) else (
-    git remote add origin "!REPO_URL!"
+    git remote add origin "%REPO_URL%"
 )
 
-:: 检查本地修改并处理提交
+:: 妫€鏌ュ伐浣滃尯
 echo.
-echo [2/4] 检查本地更改...
-set "STATUS_TEMP=%TEMP%\git_st_%RANDOM%.tmp"
-git status --porcelain > "!STATUS_TEMP!"
-set /a HAS_CHANGES=0
-for %%A in ("!STATUS_TEMP!") do if %%~zA gtr 0 set HAS_CHANGES=1
-del "!STATUS_TEMP!" 2>nul
+echo [2/4] 妫€鏌ユ湰鍦版枃浠剁姸鎬?..
+git status --porcelain | findstr /r "." >nul 2>&1
+if %errorlevel% neq 0 goto :no_uncommitted
 
-if %HAS_CHANGES% equ 1 (
-    echo 检测到本地有未提交的更新。
-    set "COMMIT_MSG=%~2"
-    if not defined COMMIT_MSG (
-        set "DEFAULT_MSG=feat: update firmware config, packages and scripts"
-        set /p "COMMIT_MSG=请输入本次提交说明 (直接回车使用默认说明): "
-        if "!COMMIT_MSG!"=="" set "COMMIT_MSG=!DEFAULT_MSG!"
-    )
-    echo 正在暂存并提交代码...
-    git add .
-    git commit -m "!COMMIT_MSG!"
+set "COMMIT_MSG=%~2"
+if "%COMMIT_MSG%"=="" (
+    set "USER_MSG="
+    set /p "USER_MSG=璇疯緭鍏ユ湰娆℃彁浜よ鏄?[鐩存帴鍥炶溅浣跨敤榛樿璇存槑]: "
 ) else (
-    echo 本地工作区干净，无新增未提交文件，将直接推送已有提交。
+    set "USER_MSG=%COMMIT_MSG%"
 )
 
-:: 推送代码
+if "%USER_MSG%"=="" set "USER_MSG=feat: update firmware config, packages and scripts"
+
+echo 姝ｅ湪鏆傚瓨骞舵彁浜ゆ枃浠?..
+git add .
+git commit -m "%USER_MSG%"
+goto :do_push
+
+:no_uncommitted
+echo 鏈湴宸ヤ綔鍖哄共鍑€锛屾棤鏈殏瀛樻枃浠讹紝灏嗙洿鎺ユ帹閫佸凡鏈夋彁浜ゃ€?
+
+:do_push
 echo.
-echo [3/4] 正在推送到 GitHub: !REPO_URL! ...
+echo [3/4] 姝ｅ湪鎺ㄩ€佸埌 GitHub: %REPO_URL% ...
 git push -u origin main
 if %errorlevel% equ 0 goto :push_success
 
 echo.
 echo ================================================================
-echo [提示] 常规推送遇到冲突或拒绝，通常因为远程仓库历史与本地不同步。
+echo [鎻愮ず] 鎺ㄩ€佹湭鎴愬姛锛?
 echo.
-echo 请选择处理方式:
-echo   [1] 覆盖推送 (强制覆盖远程，适用于个人云端构建仓库) - 推荐
-echo   [2] 变基拉取后推送 (git pull --rebase origin main)
-echo   [3] 取消退出
+echo 甯歌鍘熷洜涓庤В鍐冲姙娉?
+echo   1. 缃戠粶杩炴帴澶辫触 (SSL/TLS Handshake Failed):
+echo      - 璇峰紑鍚唬鐞?鍔犻€熻蒋浠?(濡?Watt Toolkit / Clash / 绉戝涓婄綉)
+echo      - 鎴栬€呭鏋滄偍鐨勪唬鐞嗙鍙ｄ负 7890锛屽彲鍦ㄦ彁绀烘椂閰嶇疆 Git 浠ｇ悊
+echo   2. 杩滅▼鍘嗗彶涓嶅悓姝?(闇€瑕嗙洊鎺ㄩ€?:
+echo.
+echo 璇烽€夋嫨鍚庣画鎿嶄綔:
+echo   [1] 灏濊瘯寮哄埗瑕嗙洊鎺ㄩ€?(git push --force)
+echo   [2] 灏濊瘯鎷夊彇鍚堝苟 (git pull --rebase)
+echo   [3] 璁剧疆 Git 浠ｇ悊骞堕噸璇?(濡?http://127.0.0.1:7890)
+echo   [4] 閫€鍑鸿剼鏈?
 echo ================================================================
-set /p "RETRY_OPT=请输入选项编号 [1/2/3] (默认 1): "
-if "!RETRY_OPT!"=="" set "RETRY_OPT=1"
+set "RETRY_CHOICE="
+set /p "RETRY_CHOICE=璇疯緭鍏ラ€夐」缂栧彿 [1/2/3/4] (榛樿 1): "
+if "%RETRY_CHOICE%"=="" set "RETRY_CHOICE=1"
 
-if "!RETRY_OPT!"=="1" (
-    echo 正在执行覆盖推送 (git push --force)...
+if "%RETRY_CHOICE%"=="1" (
+    echo 姝ｅ湪鎵ц寮哄埗鎺ㄩ€?..
     git push -u origin main --force
     if %errorlevel% equ 0 goto :push_success
 )
 
-if "!RETRY_OPT!"=="2" (
-    echo 正在尝试变基合并远程代码...
+if "%RETRY_CHOICE%"=="2" (
+    echo 姝ｅ湪鎷夊彇杩滅▼鏇存柊...
     git pull --rebase origin main
-    echo 正在重新推送...
+    echo 閲嶆柊鎺ㄩ€?..
     git push -u origin main
     if %errorlevel% equ 0 goto :push_success
 )
 
+if "%RETRY_CHOICE%"=="3" (
+    set "PROXY_ADDR="
+    set /p "PROXY_ADDR=璇疯緭鍏ヤ唬鐞嗗湴鍧€ (渚嬪 http://127.0.0.1:7890): "
+    if not "%PROXY_ADDR%"=="" (
+        git config --global http.proxy "%PROXY_ADDR%"
+        git config --global https.proxy "%PROXY_ADDR%"
+        echo 宸查厤缃?Git 浠ｇ悊涓?%PROXY_ADDR%锛屾鍦ㄩ噸鏂版帹閫?..
+        git push -u origin main
+        if %errorlevel% equ 0 goto :push_success
+    )
+)
+
 echo.
 echo ================================================================
-echo [错误] 推送仍未成功！
-echo 请检查:
-echo   1. 仓库地址是否正确: !REPO_URL!
-echo   2. 是否拥有写入权限（GitHub 账号登录、SSH 密钥或 Personal Access Token）
-echo   3. 网络是否能够稳定连接 github.com
+echo [閿欒] 鎺ㄩ€佹湭瀹屾垚锛佽妫€鏌ョ綉缁滄垨鏉冮檺鍚庨噸璇曘€?
 echo ================================================================
 pause
 exit /b 1
@@ -153,11 +168,8 @@ exit /b 1
 :push_success
 echo.
 echo ================================================================
-echo [4/4] 恭喜！代码已成功同步推送到 GitHub！
-echo.
-echo GitHub Actions 自动化编译已被自动触发。
-echo 您可进入仓库页面点击顶部的 [Actions] 标签页查看实时构建进度。
-echo 构建完成后固件将自动上传至 Releases 与 Artifacts。
+echo [4/4] 鎺ㄩ€佹垚鍔燂紒浠ｇ爜宸插悓姝ヨ嚦 GitHub銆?
+echo GitHub Actions 鑷姩鍖栫紪璇戝凡鑷姩瑙﹀彂锛岃鍓嶅線浠撳簱椤甸潰鏌ョ湅銆?
 echo ================================================================
 echo.
 pause
