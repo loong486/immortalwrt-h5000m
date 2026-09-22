@@ -31,6 +31,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout Repository
@@ -118,6 +120,8 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
+        # Ensure only files are kept in the release directory to prevent directory upload errors
+        find . -maxdepth 1 -type d ! -name '.' -exec rm -rf {} +
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -130,7 +134,7 @@ jobs:
 
     - name: Generate Release Tag
       id: tag
-      if: (github.event.inputs.upload_release == 'true' || github.event_name == 'schedule') && steps.compile.outputs.status == 'success' && !cancelled()
+      if: (github.event_name != 'workflow_dispatch' || github.event.inputs.upload_release == 'true') && steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         echo "release_tag=ImmortalWrt-H5000M-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
@@ -149,10 +153,8 @@ jobs:
     - name: Upload Firmware to GitHub Release
       uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled()
-      continue-on-error: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
         files: ${{ env.FIRMWARE }}/*
