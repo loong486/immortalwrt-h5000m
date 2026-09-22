@@ -56,4 +56,12 @@ if [ -f tools/llvm-bpf/Makefile ]; then
     grep -q 'HOST_BUILD_PARALLEL:=1' tools/llvm-bpf/Makefile || sed -i '1i HOST_BUILD_PARALLEL:=1' tools/llvm-bpf/Makefile
 fi
 
+# 8. Set execution permissions for luci-app-ani-rss scripts
+if [ -d package/luci-app-ani-rss ]; then
+    chmod +x package/luci-app-ani-rss/root/etc/init.d/ani-rss 2>/dev/null || true
+    chmod +x package/luci-app-ani-rss/root/etc/uci-defaults/* 2>/dev/null || true
+    chmod +x package/luci-app-ani-rss/root/usr/bin/* 2>/dev/null || true
+    chmod +x package/luci-app-ani-rss/root/usr/libexec/rpcd/* 2>/dev/null || true
+fi
+
 echo "DIY Part 2 setup completed successfully."

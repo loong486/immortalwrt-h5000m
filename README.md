@@ -15,6 +15,7 @@
 - **智能防污染 DNS**: 集成 `luci-app-mosdns` + `mosdns` (包含 `adblock_set` 插件补丁版本) + `v2dat` + 规则集
 - **UPnP 端口映射**: 集成 `luci-app-upnp` + `miniupnpd-nftables` (适配 Firewall4 / Nftables)
 - **多存储文件管理**: 集成 `luci-app-openlist` + `openlist` 核心 (官方 OpenList 4.2.6，支持挂载各类网盘、WebDAV、本地存储与 FUSE 挂载)
+- **全自动追番刮削**: 集成 `luci-app-ani-rss` + `ANI-RSS` 原生服务（基于 RSS 自动追番、订阅、下载、刮削与洗版，配合轻量 musl JRE 低开销原生运行）
 - **完整中文语言包**: 已集成所有插件的简体中文语言包
 
 ---
