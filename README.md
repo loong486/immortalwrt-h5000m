@@ -11,7 +11,7 @@
 > **专为海微腾 Hiveton H5000M 5G 路由器量身定制的高性能、开箱即用 ImmortalWrt 固件自动化编译工程。**
 
 - **🎯 研发背景**：海微腾 Hiveton H5000M 搭载联发科 Filogic 880 (MT7987A 4核 A53 @ 2.0GHz)，拥有双 2.5G 网口并集成移远 MT5700M 5G NR 模组，性能出众。然而官方系统扩展性受限，原生开源固件又存在设备树温控锁频竞争、5G 模组驱动缺失、缺少自动化追番与多网盘挂载等痛点。
-- **💡 核心设计**：本项目通过 GitHub Actions 实现了完全自动化、每周追踪官方分支（`openwrt-25.12`，Linux 6.12 内核）的云端构建流程。深度融合了 **DTS 温控补丁**、**全套 5G 驱动与 AT 守护**、**网络防污染加速**、**OpenList 网盘聚合** 以及 **ANI-RSS 原生追番服务**，为极客玩家与家庭网络中枢提供极致体验。
+- **💡 核心设计**：本项目通过 GitHub Actions 实现了完全自动化、每周追踪官方分支（`openwrt-25.12`，Linux 6.12 内核）的云端构建流程。深度融合了 **DTS 温控补丁**、**全套 5G 驱动与 AT 守护**、**网络防污染加速** 与 **OpenList 网盘聚合**，为极客玩家与家庭网络中枢提供极致体验。
 - **⚡ 特色优势**：
   - **免搭建本地编译环境**：无需耗费数十 GB 本地硬盘与数小时配置交叉编译工具链，直接利用 GitHub 云端 Runner 构建。
   - **安全与纯净**：源码与脚本 100% 透明开源，不含任何后门与冗余预装，配置精简高效。
@@ -28,7 +28,6 @@
 - **智能防污染 DNS**: 集成 `luci-app-mosdns` + `mosdns` (包含 `adblock_set` 插件补丁版本) + `v2dat` + 规则集
 - **UPnP 端口映射**: 集成 `luci-app-upnp` + `miniupnpd-nftables` (适配 Firewall4 / Nftables)
 - **多存储文件管理**: 集成 `luci-app-openlist` + `openlist` 核心 (官方 OpenList 4.2.6，支持挂载各类网盘、WebDAV、本地存储与 FUSE 挂载)
-- **全自动追番刮削**: 集成 `luci-app-ani-rss` + `ANI-RSS` 原生服务（基于 RSS 自动追番、订阅、下载、刮削与洗版，配合轻量 musl JRE 低开销原生运行）
 - **完整中文语言包**: 已集成所有插件的简体中文语言包
 
 ---
@@ -44,8 +43,6 @@
 | **MT5700M 5G 模块** | [FAN789](https://github.com/FAN789) | [FAN789/luci-app-mt5700m](https://github.com/FAN789/luci-app-mt5700m) | MT5700M 5G 模组状态监控、锁频、网络配置 Web 插件 |
 | **5G 模组后台服务** | [FUjr](https://github.com/FUjr) | [FUjr/QModem](https://github.com/FUjr/QModem) | 包含 `ubus-at-daemon` AT 指令守护与 `sms-tool_q` 短信工具 |
 | **OpenList 核心与插件** | [OpenListTeam](https://github.com/OpenListTeam) | [OpenListTeam/OpenList-OpenWRT](https://github.com/OpenListTeam/OpenList-OpenWRT)<br>[OpenListTeam/OpenList](https://github.com/OpenListTeam/OpenList) | 支持挂载各类网盘、WebDAV、本地存储与 FUSE 的聚合文件管理系统 |
-| **ANI-RSS 追番核心** | [wushuo894](https://github.com/wushuo894) | [wushuo894/ani-rss](https://github.com/wushuo894/ani-rss) | 基于 RSS 自动追番、订阅、下载、刮削与洗版主程序（Spring Boot） |
-| **ANI-RSS LuCI 插件** | [loong486](https://github.com/loong486) | [loong486/luci-app-ani-rss](https://github.com/loong486/luci-app-ani-rss) | 专为 OpenWrt 打造的纯原生 LuCI 插件（零 Docker，内置 musl JRE 助手） |
 | **MosDNS 防污染 DNS** | [sbwml](https://github.com/sbwml)<br>[IrineSistiana](https://github.com/IrineSistiana) | [sbwml/luci-app-mosdns](https://github.com/sbwml/luci-app-mosdns)<br>[IrineSistiana/mosdns](https://github.com/IrineSistiana/mosdns) | MosDNS v5 高性能 DNS 分流转发器、adblock_set 补丁与 Web 界面 |
 | **PassWall 网络加速** | [xiaorouji](https://github.com/xiaorouji) | [xiaorouji/openwrt-passwall](https://github.com/xiaorouji/openwrt-passwall) | OpenWrt 强大的多协议分流与代理管理工具 |
 | **sing-box 协议核心** | [SagerNet](https://github.com/SagerNet) | [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 新一代通用全协议通用网络代理核心 |
@@ -63,8 +60,6 @@
 │       └── build-immortalwrt.yml    # GitHub Actions 自动化构建核心工作流
 ├── config/
 │   └── h5000m.config                # H5000M 纯净种子配置 (基于本地编译验证)
-├── package/
-│   └── luci-app-ani-rss/            # 原生追番插件源码 (内置 musl JRE 与核心管理)
 ├── patches/
 │   └── h5000m-userspace-fan-control.patch # 设备树 DTS 温控补丁
 ├── scripts/
