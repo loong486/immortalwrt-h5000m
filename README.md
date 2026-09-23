@@ -29,6 +29,7 @@
 - **UPnP 端口映射**: 集成 `luci-app-upnp` + `miniupnpd-nftables` (适配 Firewall4 / Nftables)
 - **多存储文件管理**: 集成 `luci-app-openlist` + `openlist` 核心 (官方 OpenList 4.2.6，支持挂载各类网盘、WebDAV、本地存储与 FUSE 挂载)
 - **FRP 内网穿透**: 集成 `luci-app-frpc` + `frpc` (支持与云端 VPS 建立安全加密反向通道，将 OpenList 等内网服务安全穿透至外部 Docker/VPS 节点)
+- **eBPF 透明代理**: 集成 `luci-app-daede` + `daed` + `dae` (基于 Linux eBPF 内核旁路的高性能透明代理，支持双内核热切换与现代化 WebUI)
 - **完整中文语言包**: 已集成所有插件的简体中文语言包
 
 ---
@@ -51,6 +52,7 @@
 | **ChinaDNS-NG** | [zfl9](https://github.com/zfl9) | [zfl9/chinadns-ng](https://github.com/zfl9/chinadns-ng) | 高性能双栈防污染 DNS 智能分流工具 |
 | **MiniUPnPd** | [Thomas Bernard](https://github.com/miniupnp) | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | UPnP IGD 协议服务，支持现代 Linux Firewall4 (nftables) 映射 |
 | **FRP 内网穿透** | [fatedier](https://github.com/fatedier) | [fatedier/frp](https://github.com/fatedier/frp) | 高性能反向代理应用，支持 TCP/UDP/HTTP 穿透与云端反向通道 |
+| **daede (dae/daed)** | [kenzok8](https://github.com/kenzok8)<br>[daeuniverse](https://github.com/daeuniverse) | [kenzok8/openwrt-daede](https://github.com/kenzok8/openwrt-daede)<br>[daeuniverse/dae](https://github.com/daeuniverse/dae) | 基于 eBPF 的高性能透明代理内核、daed 现代化仪表盘与 LuCI 统一管理插件 |
 
 ---
 
