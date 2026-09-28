@@ -24,12 +24,10 @@
 - **底包**: [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) (官方分支 `openwrt-25.12`，Linux 6.12 内核)
 - **风扇智能温控**: 集成 `luci-app-h5000m-fancontrol` + 自动应用 H5000M DTS 设备树补丁（解除内核 thermal governor 竞争，实现平滑温控调速）
 - **5G 模块支持**: 集成 `luci-app-mt5700m` + `QModem` (包含 `ubus-at-daemon` 与 `sms-tool_q`) + CDC-NCM / RNDIS / Option 全套驱动
-- **网络路由加速**: 集成 `luci-app-passwall` + `sing-box` (全协议版本) + `xray-core` + `chinadns-ng` + `haproxy` + `v2ray-geodata`
-- **智能防污染 DNS**: 集成 `luci-app-mosdns` + `mosdns` (包含 `adblock_set` 插件补丁版本) + `v2dat` + 规则集
-- **UPnP 端口映射**: 集成 `luci-app-upnp` + `miniupnpd-nftables` (适配 Firewall4 / Nftables)
+- **网络透明代理**: 集成 `luci-app-momo` + `momo` + `sing-box` (基于 sing-box 内核的现代透明代理，原生适配 Firewall4 / nftables 与规则分流)
 - **多存储文件管理**: 集成 `luci-app-openlist` + `openlist` 核心 (官方 OpenList 4.2.6，支持挂载各类网盘、WebDAV、本地存储与 FUSE 挂载)
 - **FRP 内网穿透**: 集成 `luci-app-frpc` + `frpc` (支持与云端 VPS 建立安全加密反向通道，将 OpenList 等内网服务安全穿透至外部 Docker/VPS 节点)
-- **eBPF 透明代理**: 集成 `luci-app-daede` + `daed` + `dae` (基于 Linux eBPF 内核旁路的高性能透明代理，支持双内核热切换与现代化 WebUI)
+- **UPnP 端口映射**: 集成 `luci-app-upnp` + `miniupnpd-nftables` (适配 Firewall4 / Nftables)
 - **完整中文语言包**: 已集成所有插件的简体中文语言包
 
 ---
@@ -44,15 +42,11 @@
 | **H5000M 风扇控制** | [FAN789](https://github.com/FAN789) | [FAN789/luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol) | H5000M 专用风扇调速与多传感器综合温控插件 |
 | **MT5700M 5G 模块** | [FAN789](https://github.com/FAN789) | [FAN789/luci-app-mt5700m](https://github.com/FAN789/luci-app-mt5700m) | MT5700M 5G 模组状态监控、锁频、网络配置 Web 插件 |
 | **5G 模组后台服务** | [FUjr](https://github.com/FUjr) | [FUjr/QModem](https://github.com/FUjr/QModem) | 包含 `ubus-at-daemon` AT 指令守护与 `sms-tool_q` 短信工具 |
-| **OpenList 核心与插件** | [OpenListTeam](https://github.com/OpenListTeam) | [OpenListTeam/OpenList-OpenWRT](https://github.com/OpenListTeam/OpenList-OpenWRT)<br>[OpenListTeam/OpenList](https://github.com/OpenListTeam/OpenList) | 支持挂载各类网盘、WebDAV、本地存储与 FUSE 的聚合文件管理系统 |
-| **MosDNS 防污染 DNS** | [sbwml](https://github.com/sbwml)<br>[IrineSistiana](https://github.com/IrineSistiana) | [sbwml/luci-app-mosdns](https://github.com/sbwml/luci-app-mosdns)<br>[IrineSistiana/mosdns](https://github.com/IrineSistiana/mosdns) | MosDNS v5 高性能 DNS 分流转发器、adblock_set 补丁与 Web 界面 |
-| **PassWall 网络加速** | [xiaorouji](https://github.com/xiaorouji) | [xiaorouji/openwrt-passwall](https://github.com/xiaorouji/openwrt-passwall) | OpenWrt 强大的多协议分流与代理管理工具 |
+| **Momo 透明代理** | [Joseph Mory](https://github.com/nikkinikki-org) | [nikkinikki-org/OpenWrt-momo](https://github.com/nikkinikki-org/OpenWrt-momo) | 基于 sing-box 内核的现代透明代理与 LuCI 管理界面 |
 | **sing-box 协议核心** | [SagerNet](https://github.com/SagerNet) | [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 新一代通用全协议通用网络代理核心 |
-| **Xray 代理核心** | [XTLS Team](https://github.com/XTLS) | [XTLS/Xray-core](https://github.com/XTLS/Xray-core) | 高性能 Xray 协议核心组件 |
-| **ChinaDNS-NG** | [zfl9](https://github.com/zfl9) | [zfl9/chinadns-ng](https://github.com/zfl9/chinadns-ng) | 高性能双栈防污染 DNS 智能分流工具 |
-| **MiniUPnPd** | [Thomas Bernard](https://github.com/miniupnp) | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | UPnP IGD 协议服务，支持现代 Linux Firewall4 (nftables) 映射 |
+| **OpenList 核心与插件** | [OpenListTeam](https://github.com/OpenListTeam) | [OpenListTeam/OpenList-OpenWRT](https://github.com/OpenListTeam/OpenList-OpenWRT)<br>[OpenListTeam/OpenList](https://github.com/OpenListTeam/OpenList) | 支持挂载各类网盘、WebDAV、本地存储与 FUSE 的聚合文件管理系统 |
 | **FRP 内网穿透** | [fatedier](https://github.com/fatedier) | [fatedier/frp](https://github.com/fatedier/frp) | 高性能反向代理应用，支持 TCP/UDP/HTTP 穿透与云端反向通道 |
-| **daede (dae/daed)** | [kenzok8](https://github.com/kenzok8)<br>[daeuniverse](https://github.com/daeuniverse) | [kenzok8/openwrt-daede](https://github.com/kenzok8/openwrt-daede)<br>[daeuniverse/dae](https://github.com/daeuniverse/dae) | 基于 eBPF 的高性能透明代理内核、daed 现代化仪表盘与 LuCI 统一管理插件 |
+| **MiniUPnPd** | [Thomas Bernard](https://github.com/miniupnp) | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | UPnP IGD 协议服务，支持现代 Linux Firewall4 (nftables) 映射 |
 
 ---
 
