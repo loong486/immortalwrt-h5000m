@@ -4,6 +4,11 @@
 # Description: Clone plugins, apply patches, fix feeds precedence
 # =================================================================
 
+# ── User-configurable version ───────────────────────────────────
+# Change this single variable to upgrade sing-box in future builds
+SING_BOX_VERSION="1.14.2"
+# ────────────────────────────────────────────────────────────────
+
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # 1. Clone Hiveton H5000M Fan Control LuCI App
@@ -41,7 +46,18 @@ if [ -f feeds/packages/lang/golang/golang-package.mk ]; then
     sed -i 's|PATH=\$(STAGING_DIR_HOSTPKG)/lib/go-\$(GO_HOST_VERSION)/bin:\$(PATH)|PATH="\$(STAGING_DIR_HOSTPKG)/lib/go-\$(GO_HOST_VERSION)/bin:\$(PATH)"|' feeds/packages/lang/golang/golang-package.mk
 fi
 
-# 6. Clean up removed plugins (daede, mosdns, passwall) to prevent leftover builds
+# 6. Override sing-box version to ${SING_BOX_VERSION} (upstream feed ships older 1.12.x)
+SING_BOX_MK="feeds/packages/net/sing-box/Makefile"
+if [ -f "${SING_BOX_MK}" ]; then
+    echo "Upgrading sing-box to v${SING_BOX_VERSION}..."
+    sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=${SING_BOX_VERSION}/" "${SING_BOX_MK}"
+    sed -i "s/^PKG_HASH:=.*/PKG_HASH:=skip/" "${SING_BOX_MK}"
+    sed -i "s/^PKG_RELEASE:=.*/PKG_RELEASE:=1/" "${SING_BOX_MK}"
+else
+    echo "Warning: sing-box Makefile not found at ${SING_BOX_MK}"
+fi
+
+# 7. Clean up removed plugins (daede, mosdns, passwall) to prevent leftover builds
 rm -rf package/daede
 rm -rf feeds/packages/net/dae feeds/packages/net/daed feeds/luci/applications/luci-app-dae feeds/luci/applications/luci-app-daed
 rm -rf package/feeds/packages/dae package/feeds/packages/daed package/feeds/luci/luci-app-dae package/feeds/luci/luci-app-daed
