@@ -15,9 +15,27 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 rm -rf package/luci-app-h5000m-fancontrol
 git clone --depth 1 https://github.com/FAN789/luci-app-h5000m-fancontrol.git package/luci-app-h5000m-fancontrol
 
-# 2. Clone MT5700M 5G Module LuCI App
-rm -rf package/luci-app-mt5700m
-git clone --depth 1 https://github.com/FAN789/luci-app-mt5700m.git package/luci-app-mt5700m
+# 2. Clone QModem Generic 5G Module LuCI App (Universal + MT5700M support)
+rm -rf package/luci-app-mt5700m package/luci-app-qmodem-generic
+git clone --depth 1 https://github.com/LianXia233/luci-app-qmodem-generic.git /tmp/qmodem-generic-repo
+cp -r /tmp/qmodem-generic-repo/luci-app-qmodem-generic package/luci-app-qmodem-generic
+rm -rf /tmp/qmodem-generic-repo
+chmod +x package/luci-app-qmodem-generic/root/usr/sbin/* package/luci-app-qmodem-generic/root/etc/init.d/* 2>/dev/null || true
+
+# 2.1 Clean up QModem version string if needed (apk compatibility)
+if [ -f feeds/qmodem/version.mk ]; then
+    sed -i -E 's/^(QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$/\1_rc\2/' feeds/qmodem/version.mk
+fi
+
+# 2.2 Add first-boot cleanup script for seamless sysupgrade (removes old mt5700m menu/config)
+mkdir -p files/etc/uci-defaults
+cat << 'EOF' > files/etc/uci-defaults/99-cleanup-mt5700m
+#!/bin/sh
+rm -f /tmp/luci-indexcache
+rm -f /etc/config/mt5700m
+exit 0
+EOF
+chmod +x files/etc/uci-defaults/99-cleanup-mt5700m
 
 # 3. Clone OpenList & LuCI App (Official OpenListTeam)
 echo "Configuring OpenList..."
@@ -57,8 +75,9 @@ else
     echo "Warning: sing-box Makefile not found at ${SING_BOX_MK}"
 fi
 
-# 7. Clean up removed plugins (daede, mosdns, passwall) to prevent leftover builds
+# 7. Clean up removed plugins (daede, mosdns, passwall, mt5700m) to prevent leftover builds
 rm -rf package/daede
+rm -rf package/luci-app-mt5700m feeds/luci/applications/luci-app-mt5700m package/feeds/luci/luci-app-mt5700m
 rm -rf feeds/packages/net/dae feeds/packages/net/daed feeds/luci/applications/luci-app-dae feeds/luci/applications/luci-app-daed
 rm -rf package/feeds/packages/dae package/feeds/packages/daed package/feeds/luci/luci-app-dae package/feeds/luci/luci-app-daed
 rm -rf feeds/packages/net/mosdns feeds/luci/applications/luci-app-mosdns package/feeds/packages/mosdns package/feeds/luci/luci-app-mosdns
