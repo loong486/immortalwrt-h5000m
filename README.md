@@ -164,10 +164,6 @@ SING_BOX_VERSION="1.14.2"  # 直接修改为您需要的版本号
 ```
 提交代码后，GitHub Actions 将会自动以指定版本完成拉取与编译。
 
-### 3. 一键同步脚本使用
-* **Windows 用户**：双击运行根目录下的 `push_to_github.bat`，根据提示即可一键提交本地修改并推送至 GitHub，自动触发云端构建。
-* **Linux / macOS 用户**：运行 `./push_to_github.sh <仓库地址> [提交说明]` 即可。
-
 ---
 
 ## 📂 仓库文件组织
@@ -184,8 +180,6 @@ immortalwrt-h5000m/
 ├── scripts/
 │   ├── diy-part1.sh                  # 编译前阶段：自定义 Feed 软件源注册
 │   └── diy-part2.sh                  # 编译中阶段：插件拉取、版本覆盖与迁移注入
-├── push_to_github.bat                # Windows 平台一键自动提交与同步批处理
-├── push_to_github.sh                 # Linux / WSL 平台一键推送脚本
 ├── .gitignore                        # Git 版本控制忽略配置
 ├── LICENSE                           # MIT 开源授权协议
 └── README.md                         # 项目使用说明文档
