@@ -1,10 +1,9 @@
 #!/bin/bash
 # ================================================================
-#         ImmortalWrt H5000M 固件工程 GitHub 一键推送脚本
+#         ImmortalWrt H5000M 固件工程 GitHub 一键同步脚本
 # ================================================================
 
 set -e
-
 cd "$(dirname "$0")"
 
 echo "================================================================"
@@ -16,6 +15,7 @@ echo ""
 if [ ! -d ".git" ]; then
     echo "[1/4] 正在初始化本地 Git 仓库..."
     git init
+    git branch -M main
 fi
 
 # 检查 Git 用户配置
@@ -78,7 +78,7 @@ if [ -n "$(git status --porcelain)" ]; then
         fi
     fi
     echo "正在暂存并提交代码..."
-    git add .
+    git add -A
     git commit -m "$COMMIT_MSG"
 else
     echo "本地工作区干净，无新增未提交文件，将直接推送已有提交。"

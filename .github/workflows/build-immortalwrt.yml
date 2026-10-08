@@ -135,13 +135,14 @@ jobs:
         echo "## 🚀 ImmortalWrt 25.12 for Hiveton H5000M" >> release.txt
         echo "- **Target**: MediaTek Filogic 880 / MT7987A (Hiveton H5000M)" >> release.txt
         echo "- **Kernel**: Linux 6.12" >> release.txt
-        echo "- **Included Plugins**:" >> release.txt
-        echo "  - \`luci-app-h5000m-fancontrol\` (with userspace DTS patch)" >> release.txt
-        echo "  - \`luci-app-mt5700m\` (with QModem 5G AT daemon & SMS tools)" >> release.txt
-        echo "  - \`luci-app-momo\` (Momo with Sing-box 1.12+ 高性能透明代理)" >> release.txt
-        echo "  - \`luci-app-openlist\` (OpenList 4.2.6 多存储文件列表管理)" >> release.txt
-        echo "  - \`luci-app-frpc\` (FRP 反向代理安全内网穿透)" >> release.txt
-        echo "  - \`luci-app-upnp\` (MiniUPnPd nftables)" >> release.txt
+        echo "- **Included Core Features**:" >> release.txt
+        echo "  - \`luci-app-h5000m-fancontrol\` (DTS 设备树智能温控与平滑调速)" >> release.txt
+        echo "  - \`luci-app-qmodem-generic\` + \`luci-app-qmodem-next\` (QModem 5G 模组控制、MT5700M SIM 卡槽唤醒与按日流量统计)" >> release.txt
+        echo "  - \`sms-forwarder-next\` (多通道短信自动转发：Telegram / Bark / Webhook / 飞书 / PushDeer)" >> release.txt
+        echo "  - \`luci-app-momo\` (Momo with Sing-box 1.14+ 高性能 nftables 透明代理)" >> release.txt
+        echo "  - \`luci-app-openlist\` (OpenList 4.2.6 多存储/网盘聚合文件管理系统)" >> release.txt
+        echo "  - \`luci-app-frpc\` (FRP 反向代理内网穿透通道)" >> release.txt
+        echo "  - \`luci-app-upnp\` (MiniUPnPd nftables 端口映射)" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload Firmware to GitHub Release

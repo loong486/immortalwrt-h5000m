@@ -1,106 +1,198 @@
-# ImmortalWrt Hiveton H5000M GitHub Actions 自动化编译工程
+<div align="center">
 
-本项目是专为 **海微腾 Hiveton H5000M**（联发科 MT7987A / Filogic 880，双 2.5G 网口 + MT5700M 5G 模块）定制的 ImmortalWrt 固件云端自动化编译仓库。
+# 🚀 ImmortalWrt for Hiveton H5000M
 
-借助 GitHub Actions，每次推送更新或手动点击即可在 GitHub 云端全自动拉取最新源码、应用补丁并构建最新固件，自动上传构建产物与 GitHub Releases。
+**专为海微腾 Hiveton H5000M (MT7987A / Filogic 880 + MT5700M 5G) 深度定制的高性能、现代化 ImmortalWrt 固件自动化构建工程**
 
----
+[![Build Firmware](https://github.com/loong486/immortalwrt-h5000m/actions/workflows/build-immortalwrt.yml/badge.svg)](https://github.com/loong486/immortalwrt-h5000m/actions/workflows/build-immortalwrt.yml)
+[![Latest Release](https://img.shields.io/github/v/release/loong486/immortalwrt-h5000m?color=blue&logo=github&label=Release)](https://github.com/loong486/immortalwrt-h5000m/releases)
+[![Target](https://img.shields.io/badge/Target-MediaTek%20Filogic%20880-orange?logo=openwrt)](https://openwrt.org)
+[![Kernel](https://img.shields.io/badge/Kernel-Linux%206.12-informational?logo=linux)](https://kernel.org)
+[![Modem](https://img.shields.io/badge/5G%20Modem-MT5700M%20NR-success)](#-5g-模块与现代化-qmodem-生态)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 📖 关于本项目 (About)
+[固件特性](#-核心特性亮点) • [硬件规格](#-硬件与固件规格) • [快速刷机](#-快速刷机与升级指南) • [使用指引](#-核心功能配置指南) • [云端编译](#-云端自定义构建) • [开源致谢](#-开源致谢与上游项目)
 
-> **专为海微腾 Hiveton H5000M 5G 路由器量身定制的高性能、开箱即用 ImmortalWrt 固件自动化编译工程。**
-
-- **🎯 研发背景**：海微腾 Hiveton H5000M 搭载联发科 Filogic 880 (MT7987A 4核 A53 @ 2.0GHz)，拥有双 2.5G 网口并集成移远 MT5700M 5G NR 模组，性能出众。然而官方系统扩展性受限，原生开源固件又存在设备树温控锁频竞争、5G 模组驱动缺失、缺少自动化追番与多网盘挂载等痛点。
-- **💡 核心设计**：本项目通过 GitHub Actions 实现了完全自动化、每周追踪官方分支（`openwrt-25.12`，Linux 6.12 内核）的云端构建流程。深度融合了 **DTS 温控补丁**、**全套 5G 驱动与 AT 守护**、**网络防污染加速** 与 **OpenList 网盘聚合**，为极客玩家与家庭网络中枢提供极致体验。
-- **⚡ 特色优势**：
-  - **免搭建本地编译环境**：无需耗费数十 GB 本地硬盘与数小时配置交叉编译工具链，直接利用 GitHub 云端 Runner 构建。
-  - **安全与纯净**：源码与脚本 100% 透明开源，不含任何后门与冗余预装，配置精简高效。
-  - **一键云端自动发版**：构建完成自动上传完整固件与升级包到 GitHub Releases，支持在线直接下载与网页后台无缝升级。
+</div>
 
 ---
 
-## ✨ 固件集成特性与插件
+## 📖 项目简介 (About)
 
-- **底包**: [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) (官方分支 `openwrt-25.12`，Linux 6.12 内核)
-- **风扇智能温控**: 集成 `luci-app-h5000m-fancontrol` + 自动应用 H5000M DTS 设备树补丁（解除内核 thermal governor 竞争，实现平滑温控调速）
-- **5G 模块与短信转发**: 集成 `luci-app-qmodem-generic` + `luci-app-qmodem-next` + `sms-forwarder-next` (包含 MT5700M SIM 初始化、按日流量统计、信号/频段/小区管理、短信收发与多通道短信自动转发) + CDC-NCM / RNDIS / Option 全套驱动
-- **网络透明代理**: 集成 `luci-app-momo` + `momo` + `sing-box` (基于 sing-box 内核的现代透明代理，原生适配 Firewall4 / nftables 与规则分流)
-- **多存储文件管理**: 集成 `luci-app-openlist` + `openlist` 核心 (官方 OpenList 4.2.6，支持挂载各类网盘、WebDAV、本地存储与 FUSE 挂载)
-- **FRP 内网穿透**: 集成 `luci-app-frpc` + `frpc` (支持与云端 VPS 建立安全加密反向通道，将 OpenList 等内网服务安全穿透至外部 Docker/VPS 节点)
-- **UPnP 端口映射**: 集成 `luci-app-upnp` + `miniupnpd-nftables` (适配 Firewall4 / Nftables)
-- **完整中文语言包**: 已集成所有插件的简体中文语言包
+本项目基于 **[ImmortalWrt 25.12](https://github.com/immortalwrt/immortalwrt)** 官方源码仓库，针对 **海微腾 Hiveton H5000M** 5G CPE / 路由器量身定制。依托 GitHub Actions 实现每周自动追踪最新上游源码与自动化云端构建。
 
----
-
-## 📦 插件与核心组件来源声明 (Credits & Upstream Sources)
-
-本项目秉持开源共建理念，特此向所有被集成的优秀开源项目及其维护者致以崇高敬意。各插件与核心组件的源码来源及上游仓库声明如下：
-
-| 组件 / 插件名称 | 上游维护者 / 团队 | 上游项目仓库 | 核心功能与作用说明 |
-| :--- | :--- | :--- | :--- |
-| **ImmortalWrt 底包** | [ImmortalWrt Team](https://github.com/immortalwrt) | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) | 固件底包核心，基于 `openwrt-25.12` 分支与 Linux 6.12 内核 |
-| **H5000M 风扇控制** | [FAN789](https://github.com/FAN789) | [FAN789/luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol) | H5000M 专用风扇调速与多传感器综合温控插件 |
-| **QModem 通用模组管理** | [LianXia233](https://github.com/LianXia233) | [LianXia233/luci-app-qmodem-generic](https://github.com/LianXia233/luci-app-qmodem-generic) | 基于 QModem 重构的通用美化 UI，内置 MT5700M SIM 初始化与流量统计 |
-| **QModem 核心与短信转发** | [FUjr](https://github.com/FUjr) | [FUjr/QModem](https://github.com/FUjr/QModem) | 包含 `qmodem` 核心、`luci-app-qmodem-next`、`sms-forwarder-next` 多通道短信转发与 AT 守护 |
-| **Momo 透明代理** | [Joseph Mory](https://github.com/nikkinikki-org) | [nikkinikki-org/OpenWrt-momo](https://github.com/nikkinikki-org/OpenWrt-momo) | 基于 sing-box 内核的现代透明代理与 LuCI 管理界面 |
-| **sing-box 协议核心** | [SagerNet](https://github.com/SagerNet) | [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 新一代通用全协议通用网络代理核心 |
-| **OpenList 核心与插件** | [OpenListTeam](https://github.com/OpenListTeam) | [OpenListTeam/OpenList-OpenWRT](https://github.com/OpenListTeam/OpenList-OpenWRT)<br>[OpenListTeam/OpenList](https://github.com/OpenListTeam/OpenList) | 支持挂载各类网盘、WebDAV、本地存储与 FUSE 的聚合文件管理系统 |
-| **FRP 内网穿透** | [fatedier](https://github.com/fatedier) | [fatedier/frp](https://github.com/fatedier/frp) | 高性能反向代理应用，支持 TCP/UDP/HTTP 穿透与云端反向通道 |
-| **MiniUPnPd** | [Thomas Bernard](https://github.com/miniupnp) | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | UPnP IGD 协议服务，支持现代 Linux Firewall4 (nftables) 映射 |
+### 为什么选择本项目？
+* **解决原生系统痛点**：官方原生固件普遍存在设备树温控锁频竞争导致风扇啸叫或降频、缺少 MT5700M 5G 模组管理看板、缺乏短信自动转发等问题。
+* **现代化组件全套重构**：
+  - 模组控制彻底拥抱 **QModem 现代总线架构**，解决传统私有脚本抢占串口导致的掉线问题。
+  - 核心代理换装极速轻量的 **OpenWrt-momo + sing-box 1.14+**，告别庞大冗余的旧式代理插件。
+* **编译速度极致精简**：剥离重型交叉编译工具链（如 `llvm-bpf` 与巨型 Go 模块），将 GitHub Actions 云端编译时间由原本的 50+ 分钟大幅压缩至 **15~20 分钟**。
+* **平滑升级与配置继承**：内建迁移清理脚本，支持无缝“保留配置升级”，升级固件后原有 Wi-Fi、代理订阅与基础网络设置不丢失。
 
 ---
 
-## 📁 目录结构
+## 📋 硬件与固件规格
 
+| 属性 | 详细规格 |
+| :--- | :--- |
+| **设备型号** | 海微腾 Hiveton H5000M (5G CPE 高性能路由器) |
+| **主控芯片 (SoC)** | 联发科 MediaTek Filogic 880 (MT7987A)，4 核心 ARM Cortex-A53 @ 2.0 GHz |
+| **网络接口** | 2 × 2.5 Gbps (2.5G 网口) + 高性能 Wi-Fi 原生无线支持 |
+| **5G 模组** | 鼎桥 TD Tech MT5700M 5G NR 工业级模组 (M.2 Key-B 接口) |
+| **系统架构** | ARM64 (aarch64_cortex-a53) |
+| **固件底包** | ImmortalWrt 25.12 分支（Linux 6.12 内核，全量 Firewall4 / nftables 架构） |
+| **时区与语言** | 默认中国时区 (`Asia/Shanghai` / UTC+8)，全量集成简体中文语言包与亚洲时区库 |
+
+---
+
+## 🌟 核心特性亮点
+
+### 1. 🌡️ 硬件级智能风扇温控 (DTS Patched)
+* 自动注入专门针对 H5000M 定制的设备树 DTS 补丁，解除内核原生 Thermal Governor 的固定温控竞争。
+* 深度整合 `luci-app-h5000m-fancontrol`，根据 CPU/5G 模组实时温度实现平滑阶梯调速，兼顾高负荷散热与日常静音。
+
+### 2. 📶 5G 模块与现代化 QModem 生态
+* **无冲突串口总线**：基于 `ubus-at-daemon` 统一调度，避免多程序争抢物理串口导致模组掉线。
+* **开机自动 SIM 卡初始化**：集成 `qmodem-mt5700-fix` 服务，开机自动执行 `AT^SCICHG=0,1` 唤醒 SIM 卡槽，彻底根除基带返回 `+CME ERROR: 10`（SIM 未识别）的问题。
+* **双模组管理控制台**：
+  - **`luci-app-qmodem-generic`**：通用美化控制台，提供信号参数（RSRP/RSRQ/SINR）、全频段扫描、PCI 锁小区、频段锁定及**按日持久化流量统计**（中国时区自动切日，重启不丢数据）。
+  - **`luci-app-qmodem-next`**：现代化响应式管理后台，提供实时会话式短信收发与完整短信转发配置。
+
+### 3. 📩 全自动多通道短信转发 (`sms-forwarder-next`)
+* 收到运营商流量提醒、验证码或欠费短信时，无需打开路由后台，系统通过后台守护进程即时推送到您的随身设备。
+* **原生支持主流渠道**：
+  - **Telegram Bot**（支持自定义 Bot Token 和 Chat ID）
+  - **通用 Webhook**（完美兼容 **Bark**（iOS 推送）、**企业微信机器人**、**钉钉机器人**、**PushPlus** 等）
+  - **Server酱 / PushDeer**
+  - **自定义 Shell 脚本**（支持通过环境变量获取短信内容、发件人与时间戳自由扩展）
+
+### 4. ⚡ Momo (sing-box 1.14+) 高性能透明代理
+* 选用社区备受好评的轻量级透明代理方案 **[OpenWrt-momo](https://github.com/nikkinikki-org/OpenWrt-momo)**，原生利用 Linux `nftables` 实现极速 TProxy / TUN 流量劫持。
+* 核心引擎升级至 **sing-box 1.14+** 最新版本，占用极低，NAT 转发性能拉满。
+* 预置 `zoneinfo-asia` 时区数据库，解决 Go 语言程序日志与系统时间偏差 8 小时的问题。
+
+### 5. 📂 生产力与文件服务 (OpenList & FRP)
+* **OpenList 4.2.6**：内置官方最新版本，支持将阿里云盘、115、百度网盘、WebDAV、本地移动硬盘等统一聚合挂载，支持 Web 浏览与本地 FUSE 映射。
+* **FRP 内网穿透**：集成 `luci-app-frpc`，配合远端 VPS 实现无公网 IP 场景下的安全内网穿透。
+* **MiniUPnPd (nftables)**：完美适配 Firewall4，游戏主机与下载工具端口自动映射。
+
+---
+
+## 📦 插件矩阵与上游致谢 (Credits)
+
+| 功能分类 | 插件 / 组件名称 | 上游维护者 | 上游项目仓库 | 核心功能说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| **系统核心** | ImmortalWrt 源码 | ImmortalWrt Team | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) | 固件核心底包 (25.12, Linux 6.12) |
+| **硬件温控** | `luci-app-h5000m-fancontrol` | FAN789 | [FAN789/luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol) | H5000M 硬件风扇温控与调速 |
+| **5G 模组管理** | `luci-app-qmodem-generic` | LianXia233 | [LianXia233/luci-app-qmodem-generic](https://github.com/LianXia233/luci-app-qmodem-generic) | 通用模组控制、MT5700M 唤醒与流量统计 |
+| **5G 协议栈** | `qmodem` / `luci-app-qmodem-next` | FUjr | [FUjr/QModem](https://github.com/FUjr/QModem) | QModem 核心、AT 守护与现代 Web 界面 |
+| **短信自动转发**| `sms-forwarder-next` | FUjr | [FUjr/QModem](https://github.com/FUjr/QModem) | 多平台短信监听与 Webhook 自动转发 |
+| **网络代理** | `luci-app-momo` / `momo` | Joseph Mory | [nikkinikki-org/OpenWrt-momo](https://github.com/nikkinikki-org/OpenWrt-momo) | 现代轻量 nftables 透明代理 |
+| **代理内核** | `sing-box` (v1.14+) | SagerNet | [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 全协议现代代理引擎 |
+| **聚合网盘** | `luci-app-openlist` / `openlist` | OpenListTeam | [OpenListTeam/OpenList-OpenWRT](https://github.com/OpenListTeam/OpenList-OpenWRT) | 多存储与网盘聚合管理系统 |
+| **内网穿透** | `luci-app-frpc` / `frpc` | fatedier | [fatedier/frp](https://github.com/fatedier/frp) | 高性能反向代理通道 |
+| **端口映射** | `miniupnpd-nftables` | Thomas Bernard | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | Firewall4 原生 UPnP IGD 映射服务 |
+
+---
+
+## 🛠️ 快速刷机与升级指南
+
+### 1. 默认登录信息
+* **管理后台 IP**：`192.168.1.1`
+* **默认用户**：`root`
+* **默认密码**：无密码（初次进入直接点击登录）
+
+### 2. 升级固件 (保留现有配置)
+如果您目前正在运行本固件或兼容系统：
+1. 从 GitHub 仓库的 **[Releases](https://github.com/loong486/immortalwrt-h5000m/releases)** 页面下载最新的 `sysupgrade.bin` 固件包。
+2. 进入路由器后台：**系统 → 备份/升级 → 刷写固件**。
+3. 上传固件包，**勾选“保留配置”**，确认刷写。
+4. > **提示**：固件内置了自动化迁移清理脚本（`99-cleanup-mt5700m`），首次启动会自动重置旧版菜单临时缓存，原有的 LAN IP、Wi-Fi 密码、Momo 节点规则均会完好保留。
+
+### 3. 全新安装 (不保留配置)
+首次从官方原厂固件或其他第三方固件切换时，建议取消勾选“保留配置”进行全新刷写，以获得最纯净稳定的运行环境。
+
+---
+
+## ⚙️ 核心功能配置指南
+
+### 📶 5G 模组与联网调试
+* 登录后台，进入 **移动网络 → 模组管理**。
+* 固件启动后会自动识别 MT5700M 并完成 SIM 初始化。如需锁定特定 5G/4G 频段或基站 PCI，可在**射频与小区**页面进行勾选保存。
+* 在概览页面可实时查看基于中国时区的按日累计上传/下载流量。
+
+### 📩 配置短信自动转发
+1. 进入后台：**调制解调器 → 短信 → 短信转发**。
+2. 勾选 **启用短信转发服务**。
+3. 添加转发实例：
+   * **Telegram 示例**：选择 `Telegram Bot`，配置 JSON：
+     ```json
+     {
+       "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+       "chat_id": "987654321"
+     }
+     ```
+   * **Bark 示例 (iOS)**：选择 `Generic Webhook`，配置 JSON：
+     ```json
+     {
+       "webhook_url": "https://api.day.app/YOUR_BARK_KEY/$sms_body?title=收到新短信($sms_sender)"
+     }
+     ```
+   * **企业微信群机器人示例**：选择 `Generic Webhook`，指向企微 Webhook 地址即可。
+
+### 🚀 Momo 代理配置
+1. 进入后台：**服务 → Momo**。
+2. 在订阅设置中填入您的代理节点订阅链接，更新节点。
+3. 推荐使用 **TProxy 模式**（nftables 原生转发，性能最佳）。勾选“启用”并点击“保存并应用”。
+
+---
+
+## 💻 云端自定义构建
+
+本项目完全基于 GitHub Actions 自动化运维：
+
+### 1. 快速 Fork 编译属于自己的固件
+1. 点击本仓库右上角 **Fork** 到您的个人 GitHub 账号。
+2. 进入您 Fork 后的仓库页面：**Settings → Actions → General → Workflow permissions**，勾选 **Read and write permissions** 并保存。
+3. 进入 **Actions** 标签页，在左侧选择 **Build ImmortalWrt H5000M Firmware**，点击右侧 **Run workflow** 即可开始全自动云端构建。
+4. 构建完成后，前往 **Releases** 即可下载生成的固件。
+
+### 2. 升级与调整 sing-box 核心版本
+如需体验未来最新发布的 sing-box，仅需修改 [`scripts/diy-part2.sh`](scripts/diy-part2.sh) 第 9 行：
+```bash
+SING_BOX_VERSION="1.14.2"  # 直接修改为您需要的版本号
 ```
+提交代码后，GitHub Actions 将会自动以指定版本完成拉取与编译。
+
+### 3. 一键同步脚本使用
+* **Windows 用户**：双击运行根目录下的 `push_to_github.bat`，根据提示即可一键提交本地修改并推送至 GitHub，自动触发云端构建。
+* **Linux / macOS 用户**：运行 `./push_to_github.sh <仓库地址> [提交说明]` 即可。
+
+---
+
+## 📂 仓库文件组织
+
+```text
+immortalwrt-h5000m/
 ├── .github/
 │   └── workflows/
-│       └── build-immortalwrt.yml    # GitHub Actions 自动化构建核心工作流
+│       └── build-immortalwrt.yml     # GitHub Actions 自动化云端编译流水线
 ├── config/
-│   └── h5000m.config                # H5000M 纯净种子配置 (基于本地编译验证)
+│   └── h5000m.config                 # H5000M 固件编译种子配置文件
 ├── patches/
-│   └── h5000m-userspace-fan-control.patch # 设备树 DTS 温控补丁
+│   └── h5000m-userspace-fan-control.patch # 设备树 DTS 用户态智能温控补丁
 ├── scripts/
-│   ├── diy-part1.sh                 # 自定义 Feeds 添加脚本 (QModem, MosDNS 等)
-│   └── diy-part2.sh                 # 源码克隆、补丁注入、源优先级修复脚本
-├── push_to_github.bat               # Windows 一键自动推送脚本 (智能识别远程)
-├── push_to_github.sh                # Linux / WSL 一键推送脚本
-├── .gitignore                       # Git 忽略配置
-└── README.md                        # 项目说明文档与开源致谢
+│   ├── diy-part1.sh                  # 编译前阶段：自定义 Feed 软件源注册
+│   └── diy-part2.sh                  # 编译中阶段：插件拉取、版本覆盖与迁移注入
+├── push_to_github.bat                # Windows 平台一键自动提交与同步批处理
+├── push_to_github.sh                 # Linux / WSL 平台一键推送脚本
+├── .gitignore                        # Git 版本控制忽略配置
+├── LICENSE                           # MIT 开源授权协议
+└── README.md                         # 项目使用说明文档
 ```
 
 ---
 
-## 🚀 如何使用 GitHub Actions 自动编译？
+## 📜 开源许可
 
-### 第一步：在 GitHub 上新建仓库
-1. 登录您的 GitHub 账号，点击右上角的 **「+」 -> 「New repository」**。
-2. 填写仓库名称（例如 `immortalwrt-h5000m`），选择 **Public** 或 **Private**（公开或私有均可）。
-3. **不要**勾选 "Initialize this repository with a README"（保持空仓库）。
-4. 点击 **「Create repository」**。
-
-### 第二步：将本地项目推送到您的 GitHub 仓库
-在 Windows 上，直接双击项目根目录下的 **`push_to_github.bat`** 脚本即可；或者在本地终端中执行：
-```bash
-# 替换为您的 GitHub 仓库地址
-git remote set-url origin https://github.com/<您的用户名>/<您的仓库名>.git
-
-# 推送代码到 GitHub 的 main 分支
-git push -u origin main
-```
-
-### 第三步：开启 GitHub Actions 写入权限（用于自动发布 Release）
-1. 打开您的 GitHub 仓库页面，进入 **Settings -> Actions -> General**。
-2. 滚动到底部的 **Workflow permissions**。
-3. 选择 **「Read and write permissions」**，并勾选 **「Allow GitHub Actions to create and approve pull requests」**。
-4. 点击 **Save**。
-
-### 第四步：触发自动编译
-- **自动触发**：当您通过 `push_to_github.bat` 推送更新到 GitHub 时，GitHub Actions 将会自动触发构建。
-- **手动触发**：进入仓库页面顶部 **Actions** 标签页，点击左侧的 **「Build ImmortalWrt H5000M Firmware」**，然后点击右侧的 **「Run workflow」** 按钮即可。
-- **定时触发**：默认配置为每周定期检测构建，保持固件核心与规则最新。
-
-### 第五步：下载固件
-构建完成后（耗时约 1.5 ~ 2.5 小时）：
-- 固件会自动上传到当前 Actions 运行记录的 **Artifacts** 区域。
-- 如果勾选了 Release，固件会自动发布在仓库右侧的 **Releases** 页面中，直接点击即可下载 `.bin` 固件。
+本项目源码及相关脚本基于 [MIT License](LICENSE) 协议开源。集成的第三方软件包与插件均遵循其各自的原生开源协议。
