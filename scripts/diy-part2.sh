@@ -18,6 +18,23 @@ if [ -f feeds/qmodem/version.mk ]; then
     sed -i -E 's/^(QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$/\1_rc\2/' feeds/qmodem/version.mk
 fi
 
+# 2.1.1 Fix ndisc6 upstream download URL and pre-populate dl cache
+echo "Fixing ndisc6 source URL and cache..."
+for f in feeds/qmodem/application/ndisc6/Makefile package/feeds/qmodem/ndisc6/Makefile; do
+    if [ -f "$f" ]; then
+        sed -i 's|http://www.remlab.net/files/ndisc6|https://www.remlab.net/files/ndisc6/archive/|g' "$f"
+    fi
+done
+
+mkdir -p dl
+if [ -f "${PROJECT_DIR}/patches/sources/ndisc6-1.0.2.tar.bz2" ]; then
+    echo "Copying bundled ndisc6-1.0.2.tar.bz2 to dl/..."
+    cp "${PROJECT_DIR}/patches/sources/ndisc6-1.0.2.tar.bz2" dl/ndisc6-1.0.2.tar.bz2
+elif [ ! -s dl/ndisc6-1.0.2.tar.bz2 ]; then
+    echo "Pre-fetching ndisc6-1.0.2.tar.bz2..."
+    curl -f -s -L --retry 3 "https://www.remlab.net/files/ndisc6/archive/ndisc6-1.0.2.tar.bz2" -o dl/ndisc6-1.0.2.tar.bz2 || true
+fi
+
 # 2.2 Add first-boot cleanup script for seamless sysupgrade (removes legacy menu/configs)
 mkdir -p files/etc/uci-defaults
 cat << 'EOF' > files/etc/uci-defaults/99-cleanup-legacy
@@ -111,6 +128,13 @@ endef
 
 define Package/honk/description
  honk is an eBPF transparent proxy engine with embedded Doona WebUI and LuCI integration.
+endef
+
+define Build/Prepare
+	mkdir -p $(PKG_BUILD_DIR)
+endef
+
+define Build/Configure
 endef
 
 define Build/Compile
