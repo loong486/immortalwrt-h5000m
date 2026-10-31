@@ -1,13 +1,8 @@
 #!/bin/bash
 # =================================================================
 # DIY script part 2 (After feeds install)
-# Description: Clone plugins, apply patches, fix feeds precedence
+# Description: Clone plugins, apply patches, integrate honk
 # =================================================================
-
-# ── User-configurable version ───────────────────────────────────
-# Change this single variable to upgrade sing-box in future builds
-SING_BOX_VERSION="1.14.2"
-# ────────────────────────────────────────────────────────────────
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -30,6 +25,7 @@ cat << 'EOF' > files/etc/uci-defaults/99-cleanup-legacy
 rm -f /tmp/luci-indexcache
 rm -f /etc/config/mt5700m
 rm -f /etc/config/qmodem_generic
+rm -f /etc/config/momo
 exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-cleanup-legacy
@@ -65,7 +61,100 @@ rm -rf package/feeds/luci/luci-app-openlist
 rm -rf package/openlist
 git clone --depth 1 https://github.com/OpenListTeam/OpenList-OpenWRT.git package/openlist
 
-# 4. Apply H5000M DTS patch for userspace fan control
+# 4. Integrate honk (eBPF transparent proxy) and its LuCI app
+echo "Integrating honk, luci-app-honk, and luci-lib-daeuniverse..."
+rm -rf package/honk package/luci-app-honk package/luci-lib-daeuniverse
+git clone --depth 1 https://github.com/daeuniverse/openwrt-packages.git /tmp/daeuniverse-packages
+
+cp -r /tmp/daeuniverse-packages/luci-app-honk package/luci-app-honk
+cp -r /tmp/daeuniverse-packages/luci-lib-daeuniverse package/luci-lib-daeuniverse
+mkdir -p package/honk/files
+cp -r /tmp/daeuniverse-packages/honk/files/* package/honk/files/
+rm -rf /tmp/daeuniverse-packages
+
+# Download official prebuilt honk-core (musl full with embedded doona WebUI)
+HONK_LATEST_TAG=$(curl -s https://api.github.com/repos/daeuniverse/honk/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+[ -z "$HONK_LATEST_TAG" ] && HONK_LATEST_TAG="v0.1.0-beta.4"
+echo "Fetching prebuilt honk-core (${HONK_LATEST_TAG}) for aarch64 musl..."
+mkdir -p /tmp/honk-bin
+curl -s -L "https://github.com/daeuniverse/honk/releases/download/${HONK_LATEST_TAG}/honk-core-${HONK_LATEST_TAG}-aarch64-unknown-linux-musl-full.tar.gz" -o /tmp/honk-bin/honk-core.tar.gz
+tar -xzf /tmp/honk-bin/honk-core.tar.gz -C /tmp/honk-bin/
+HONK_BIN_DIR=$(find /tmp/honk-bin -type d -name "honk-core*" | head -n 1)
+cp "${HONK_BIN_DIR}/honk-core" package/honk/files/honk-core
+chmod +x package/honk/files/honk-core package/honk/files/honk.init
+rm -rf /tmp/honk-bin
+
+# Write standalone package/honk/Makefile for prebuilt binary installation
+cat << 'EOF' > package/honk/Makefile
+include $(TOPDIR)/rules.mk
+
+PKG_NAME:=honk
+PKG_VERSION:=0.1.0_beta4
+PKG_RELEASE:=1
+
+PKG_LICENSE:=GPL-3.0-only
+PKG_LICENSE_FILES:=LICENSE
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
+
+include $(INCLUDE_DIR)/package.mk
+
+define Package/honk
+  SECTION:=net
+  CATEGORY:=Network
+  SUBMENU:=Web Servers/Proxies
+  TITLE:=eBPF transparent proxy engine (honk-core) with embedded UI
+  URL:=https://github.com/daeuniverse/honk
+  DEPENDS:=+libstdcpp +kmod-veth +kmod-sched-core +kmod-sched-bpf \
+           +kmod-nft-core +kmod-nft-queue +kmod-nfnetlink-queue \
+           +kmod-nf-conntrack +v2ray-geoip +v2ray-geosite
+endef
+
+define Package/honk/description
+ honk is an eBPF transparent proxy engine with embedded Doona WebUI and LuCI integration.
+endef
+
+define Build/Compile
+endef
+
+define Package/honk/conffiles
+/etc/config/honk
+/etc/honk/config.dae
+endef
+
+define Package/honk/postinst
+#!/bin/sh
+[ -z "$${IPKG_INSTROOT}" ] || exit 0
+/etc/init.d/honk enabled && /etc/init.d/honk restart
+exit 0
+endef
+
+define Package/honk/install
+	$(INSTALL_DIR) $(1)/usr/bin
+	$(INSTALL_BIN) ./files/honk-core $(1)/usr/bin/honk-core
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) ./files/honk.init $(1)/etc/init.d/honk
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_CONF) ./files/honk.config $(1)/etc/config/honk
+	$(INSTALL_DIR) $(1)/etc/honk
+	$(INSTALL_CONF) ./files/config.dae $(1)/etc/honk/config.dae
+	$(INSTALL_DIR) $(1)/lib/upgrade/keep.d
+	printf '%s\n' '/etc/honk/data/' > $(1)/lib/upgrade/keep.d/honk
+	$(INSTALL_DIR) $(1)/usr/share/honk
+	$(LN) ../v2ray/geoip.dat $(1)/usr/share/honk/geoip.dat
+	$(LN) ../v2ray/geosite.dat $(1)/usr/share/honk/geosite.dat
+endef
+
+$(eval $(call BuildPackage,honk))
+EOF
+
+# Pre-configure daeuniverse APK repository for seamless online updates
+mkdir -p files/etc/apk/repositories.d files/etc/apk/keys
+curl -s -L "https://openwrt.daeuniverse.org/public-key.pem" -o files/etc/apk/keys/daeuniverse.pem
+cat << 'EOF' > files/etc/apk/repositories.d/daeuniverse.list
+@daeuniverse https://openwrt.daeuniverse.org/25.12/packages/aarch64_cortex-a53/packages.adb
+EOF
+
+# 5. Apply H5000M DTS patch for userspace fan control
 PATCH_FILE=""
 if [ -f "${PROJECT_DIR}/patches/h5000m-userspace-fan-control.patch" ]; then
     PATCH_FILE="${PROJECT_DIR}/patches/h5000m-userspace-fan-control.patch"
@@ -78,25 +167,14 @@ if [ -n "${PATCH_FILE}" ]; then
     patch -p1 < "${PATCH_FILE}" || echo "Warning: Patch already applied or failed"
 fi
 
-# 5. Fix unquoted PATH in golang-package.mk to prevent shell syntax errors
+# 6. Fix unquoted PATH in golang-package.mk to prevent shell syntax errors
 if [ -f feeds/packages/lang/golang/golang-package.mk ]; then
     sed -i 's|PATH=\$(STAGING_DIR_HOSTPKG)/lib/go-\$(GO_HOST_VERSION)/bin:\$(PATH)|PATH="\$(STAGING_DIR_HOSTPKG)/lib/go-\$(GO_HOST_VERSION)/bin:\$(PATH)"|' feeds/packages/lang/golang/golang-package.mk
 fi
 
-# 6. Override sing-box version to ${SING_BOX_VERSION} (upstream feed ships older 1.12.x)
-SING_BOX_MK="feeds/packages/net/sing-box/Makefile"
-if [ -f "${SING_BOX_MK}" ]; then
-    echo "Upgrading sing-box to v${SING_BOX_VERSION}..."
-    sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=${SING_BOX_VERSION}/" "${SING_BOX_MK}"
-    sed -i "s/^PKG_HASH:=.*/PKG_HASH:=skip/" "${SING_BOX_MK}"
-    sed -i "s/^PKG_RELEASE:=.*/PKG_RELEASE:=1/" "${SING_BOX_MK}"
-else
-    echo "Warning: sing-box Makefile not found at ${SING_BOX_MK}"
-fi
-
-# 7. Clean up removed plugins (daede, mosdns, passwall, mt5700m) to prevent leftover builds
-rm -rf package/daede
-rm -rf package/luci-app-mt5700m feeds/luci/applications/luci-app-mt5700m package/feeds/luci/luci-app-mt5700m
+# 7. Clean up removed plugins (momo, sing-box, daede, mt5700m) to prevent leftover builds
+rm -rf package/momo package/luci-app-momo feeds/momo package/feeds/momo
+rm -rf package/daede package/luci-app-mt5700m feeds/luci/applications/luci-app-mt5700m package/feeds/luci/luci-app-mt5700m
 rm -rf feeds/packages/net/dae feeds/packages/net/daed feeds/luci/applications/luci-app-dae feeds/luci/applications/luci-app-daed
 rm -rf package/feeds/packages/dae package/feeds/packages/daed package/feeds/luci/luci-app-dae package/feeds/luci/luci-app-daed
 rm -rf feeds/packages/net/mosdns feeds/luci/applications/luci-app-mosdns package/feeds/packages/mosdns package/feeds/luci/luci-app-mosdns

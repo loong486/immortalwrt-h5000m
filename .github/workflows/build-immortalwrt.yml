@@ -140,7 +140,7 @@ jobs:
         echo "  - \`luci-app-qmodem-next\` + \`qmodem\` (QModem 官方 5G 模组控制协议栈与现代化 Web 管理后台)" >> release.txt
         echo "  - \`luci-app-at-webserver\` + \`at-webserver\` (MT5700 专属独立现代 WebUI 看板、定时锁频锁小区与 AT WebSocket 服务)" >> release.txt
         echo "  - \`sms-forwarder-next\` (多通道短信自动转发：Telegram / Bark / Webhook / 飞书 / PushDeer)" >> release.txt
-        echo "  - \`luci-app-momo\` (Momo with Sing-box 1.14+ 高性能 nftables 透明代理)" >> release.txt
+        echo "  - \`luci-app-honk\` + \`honk\` (daeuniverse eBPF 极速透明代理内核，集成 Doona WebUI 与 LuCI 后台)" >> release.txt
         echo "  - \`luci-app-openlist\` (OpenList 4.2.6 多存储/网盘聚合文件管理系统)" >> release.txt
         echo "  - \`luci-app-frpc\` (FRP 反向代理内网穿透通道)" >> release.txt
         echo "  - \`luci-app-upnp\` (MiniUPnPd nftables 端口映射)" >> release.txt
