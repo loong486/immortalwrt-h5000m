@@ -43,6 +43,8 @@ rm -f /tmp/luci-indexcache
 rm -f /etc/config/mt5700m
 rm -f /etc/config/qmodem_generic
 rm -f /etc/config/momo
+# Remove nonexistent upstream feeds (qmodem, video) to prevent apk update errors
+sed -i '/qmodem/d;/video/d' /etc/apk/repositories.d/*.list /etc/apk/repositories 2>/dev/null
 exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-cleanup-legacy
