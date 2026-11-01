@@ -171,11 +171,19 @@ endef
 $(eval $(call BuildPackage,honk))
 EOF
 
+# Pre-install detached vmlinux BTF blob for mediatek/filogic (honk eBPF CO-RE requirement)
+echo "Pre-installing detached vmlinux BTF blob for mediatek/filogic..."
+mkdir -p files/usr/lib/debug/boot
+BTF_TAR="25.12.6-vmlinux-mediatek-filogic-6.12.112.tar.xz"
+BTF_URL="https://github.com/daeuniverse/openwrt-packages/releases/download/openwrt-25.12.6-6.12.112-20261030/${BTF_TAR}"
+curl -s -L --retry 3 "${BTF_URL}" | tar -xJf - -C files/usr/lib/debug/boot/ || echo "Warning: Failed to fetch BTF blob"
+
 # Pre-configure daeuniverse APK repository for seamless online updates
 mkdir -p files/etc/apk/repositories.d files/etc/apk/keys
 curl -s -L "https://openwrt.daeuniverse.org/public-key.pem" -o files/etc/apk/keys/daeuniverse.pem
 cat << 'EOF' > files/etc/apk/repositories.d/daeuniverse.list
-@daeuniverse https://openwrt.daeuniverse.org/25.12/packages/aarch64_cortex-a53/packages.adb
+https://openwrt.daeuniverse.org/25.12/packages/aarch64_cortex-a53/packages.adb
+https://openwrt.daeuniverse.org/25.12/kmods/25.12.6/mediatek/filogic/packages.adb
 EOF
 
 # 5. Apply H5000M DTS patch for userspace fan control
