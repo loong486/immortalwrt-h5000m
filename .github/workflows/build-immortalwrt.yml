@@ -49,7 +49,7 @@ jobs:
       run: |
         sudo apt-get -qq update
         sudo apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache clang cmake cpio curl device-tree-compiler dwarves fastjar flex gawk gettext gcc-multilib \
+          bzip2 ccache clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib \
           g++-multilib git gnutls-bin gperf haveged help2man intltool libelf-dev libfuse-dev \
           libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev \
           libreadline-dev libssl-dev libtool lld llvm lrzsz msmtp nano ninja-build p7zip p7zip-full patch \
@@ -140,7 +140,7 @@ jobs:
         echo "  - \`luci-app-qmodem-next\` + \`qmodem\` (QModem 官方 5G 模组控制协议栈与现代化 Web 管理后台)" >> release.txt
         echo "  - \`luci-app-at-webserver\` + \`at-webserver\` (MT5700 专属独立现代 WebUI 看板、定时锁频锁小区与 AT WebSocket 服务)" >> release.txt
         echo "  - \`sms-forwarder-next\` (多通道短信自动转发：Telegram / Bark / Webhook / 飞书 / PushDeer)" >> release.txt
-        echo "  - \`luci-app-honk\` + \`honk\` (daeuniverse eBPF 极速透明代理内核，集成 Doona WebUI 与 LuCI 后台)" >> release.txt
+        echo "  - \`luci-app-momo\` (Momo with Sing-box 1.14+ 高性能 nftables 透明代理)" >> release.txt
         echo "  - \`luci-app-openlist\` (OpenList 4.2.6 多存储/网盘聚合文件管理系统)" >> release.txt
         echo "  - \`luci-app-frpc\` (FRP 反向代理内网穿透通道)" >> release.txt
         echo "  - \`luci-app-upnp\` (MiniUPnPd nftables 端口映射)" >> release.txt
