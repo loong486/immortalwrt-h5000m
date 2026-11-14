@@ -40,8 +40,15 @@ jobs:
 
     - name: Free Disk Space
       run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/powershell
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/local/share/chromium
         sudo docker image prune -a -f || true
+        if [ "$(free -m | awk '/^Swap:/ {print $2}')" -lt 6000 ]; then
+          sudo fallocate -l 8G /swapfile_ci || sudo dd if=/dev/zero of=/swapfile_ci bs=1M count=8192
+          sudo chmod 600 /swapfile_ci
+          sudo mkswap /swapfile_ci
+          sudo swapon /swapfile_ci
+        fi
+        free -h
 
     - name: Initialize Build Environment
       env:
@@ -54,7 +61,7 @@ jobs:
           libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev \
           libreadline-dev libssl-dev libtool lld llvm lrzsz msmtp nano ninja-build p7zip p7zip-full patch \
           pkgconf python3 python3-pip python3-ply python3-docutils qemu-utils rsync scons squashfs-tools subversion \
-          swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+          swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown -R $(id -u):$(id -g) /workdir
@@ -98,7 +105,7 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 V=s
+        nice -n 10 make -j$(nproc) || nice -n 10 make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV

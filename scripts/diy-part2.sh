@@ -87,6 +87,27 @@ rm -rf package/feeds/luci/luci-app-openlist
 rm -rf package/openlist
 git clone --depth 1 https://github.com/OpenListTeam/OpenList-OpenWRT.git package/openlist
 
+# 3.5 Pre-install official prebuilt llvm-bpf toolchain (avoids 70-min LLVM source build & runner OOM)
+if [ -f tools/llvm-bpf/Makefile ]; then
+    LLVM_BPF_VER=$(sed -n 's/^PKG_VERSION:=//p' tools/llvm-bpf/Makefile | head -n1 | tr -d '[:space:]')
+    LLVM_BPF_TAR="llvm-bpf-${LLVM_BPF_VER}.Linux-x86_64.tar.zst"
+    echo "Fetching prebuilt ${LLVM_BPF_TAR}..."
+    if curl -f -s -L --retry 3 "https://downloads.immortalwrt.org/releases/25.12-SNAPSHOT/targets/mediatek/filogic/${LLVM_BPF_TAR}" -o "/tmp/${LLVM_BPF_TAR}" || \
+       curl -f -s -L --retry 3 "https://mirrors.vsean.net/openwrt/releases/25.12-SNAPSHOT/targets/mediatek/filogic/${LLVM_BPF_TAR}" -o "/tmp/${LLVM_BPF_TAR}" || \
+       curl -f -s -L --retry 3 "https://downloads.openwrt.org/releases/25.12-SNAPSHOT/targets/mediatek/filogic/${LLVM_BPF_TAR}" -o "/tmp/${LLVM_BPF_TAR}"; then
+        tar -I zstd -xf "/tmp/${LLVM_BPF_TAR}" -C .
+        rm -f "/tmp/${LLVM_BPF_TAR}"
+        ls -la llvm-bpf/.llvm-version
+    else
+        echo "Warning: Prebuilt ${LLVM_BPF_TAR} unavailable, falling back to host LLVM toolchain..."
+        cat << 'EOCFG' >> .config
+CONFIG_DEVEL=y
+CONFIG_BPF_TOOLCHAIN_HOST=y
+# CONFIG_BPF_TOOLCHAIN_BUILD_LLVM is not set
+EOCFG
+    fi
+fi
+
 # 4. Apply H5000M DTS patch for userspace fan control
 PATCH_FILE=""
 if [ -f "${PROJECT_DIR}/patches/h5000m-userspace-fan-control.patch" ]; then
@@ -108,10 +129,16 @@ fi
 # 6. Override sing-box version to ${SING_BOX_VERSION} (upstream feed ships older 1.12.x)
 SING_BOX_MK="feeds/packages/net/sing-box/Makefile"
 if [ -f "${SING_BOX_MK}" ]; then
-    echo "Upgrading sing-box to v${SING_BOX_VERSION}..."
+    echo "Upgrading sing-box to v${SING_BOX_VERSION} (with Go 1.26 linkname compatibility)..."
     sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=${SING_BOX_VERSION}/" "${SING_BOX_MK}"
     sed -i "s/^PKG_HASH:=.*/PKG_HASH:=skip/" "${SING_BOX_MK}"
     sed -i "s/^PKG_RELEASE:=.*/PKG_RELEASE:=1/" "${SING_BOX_MK}"
+    grep -q '^GO_PKG_LDFLAGS:=' "${SING_BOX_MK}" || sed -i '/^GO_PKG_LDFLAGS_X:=/i GO_PKG_LDFLAGS:=-checklinkname=0' "${SING_BOX_MK}"
+    sed -i 's|^GO_PKG_LDFLAGS_X:=.*|GO_PKG_LDFLAGS_X:=$(GO_PKG)/constant.Version=$(PKG_VERSION) runtime.godebugDefault=multipathtcp=0,tlssha1=1|' "${SING_BOX_MK}"
+    if ! grep -q 'badlinkname' "${SING_BOX_MK}"; then
+        sed -i 's/GO_PKG_TAGS:=with_acme,/GO_PKG_TAGS:=badlinkname,tfogo_checklinkname0,with_acme,/' "${SING_BOX_MK}"
+        sed -i 's/GO_PKG_TAGS:=\$(subst \$(space),\$(comma),\$(strip \\/GO_PKG_TAGS:=\$(subst \$(space),\$(comma),\$(strip badlinkname tfogo_checklinkname0 \\/' "${SING_BOX_MK}"
+    fi
 else
     echo "Warning: sing-box Makefile not found at ${SING_BOX_MK}"
 fi
