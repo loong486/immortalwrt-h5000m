@@ -11,6 +11,10 @@ SING_BOX_VERSION="1.14.4"
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+if ! command python3 -c "import sys" >/dev/null 2>&1; then
+    python3() { command python "$@"; }
+fi
+
 # 1. Clone Hiveton H5000M Fan Control LuCI App
 rm -rf package/luci-app-h5000m-fancontrol
 git clone --depth 1 https://github.com/FAN789/luci-app-h5000m-fancontrol.git package/luci-app-h5000m-fancontrol
@@ -40,43 +44,287 @@ elif [ ! -s dl/ndisc6-1.0.2.tar.bz2 ]; then
     curl -f -s -L --retry 3 "https://www.remlab.net/files/ndisc6/archive/ndisc6-1.0.2.tar.bz2" -o dl/ndisc6-1.0.2.tar.bz2 || true
 fi
 
-# 2.2 Add first-boot cleanup script for seamless sysupgrade (removes legacy menu/configs)
+# 2.2 Add first-boot cleanup script for seamless sysupgrade (removes legacy menu/configs + H5000M defaults)
 mkdir -p files/etc/uci-defaults
 cat << 'EOF' > files/etc/uci-defaults/99-cleanup-legacy
 #!/bin/sh
 rm -rf /tmp/luci-modulecache /tmp/luci-indexcache*
-rm -f /etc/config/mt5700m
-rm -f /etc/config/qmodem_generic
-rm -f /etc/config/honk
+if [ -x /etc/init.d/at-webserver ]; then
+    /etc/init.d/at-webserver stop >/dev/null 2>&1 || true
+    /etc/init.d/at-webserver disable >/dev/null 2>&1 || true
+fi
+rm -f /etc/init.d/at-webserver /etc/rc.d/*at-webserver* /etc/config/at-webserver /usr/bin/at-server.py
+rm -rf /www/5700
+rm -f /etc/config/mt5700m /etc/config/qmodem_generic /etc/config/honk
 rm -rf /etc/honk /usr/lib/debug/boot/vmlinux
 rm -f /etc/apk/repositories.d/daeuniverse.list /etc/apk/keys/daeuniverse.pem
-# Remove nonexistent upstream feeds (qmodem, video, momo, daeuniverse) to prevent apk update errors
 sed -i '/qmodem/d;/video/d;/momo/d;/daeuniverse/d' /etc/apk/repositories.d/*.list /etc/apk/repositories 2>/dev/null
+
+# 1. Default LAN IP = 192.168.88.1
+uci -q set network.lan.ipaddr='192.168.88.1'
+uci -q set network.lan.netmask='255.255.255.0'
+uci -q commit network
+
+# 2. Default root password = root
+printf "root\nroot\n" | passwd root >/dev/null 2>&1 || true
+
+# 3. Unified Wi-Fi password = 198198ko across all existing wifi-iface sections
+for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
+    dev=$(uci -q get "wireless.${s}.device")
+    band=$(uci -q get "wireless.${dev}.band")
+    enc=$(uci -q get "wireless.${s}.encryption")
+    if [ -z "$enc" ] || [ "$enc" = "none" ] || [ "$enc" = "owe" ]; then
+        if [ "$band" = "6g" ]; then
+            uci -q set "wireless.${s}.encryption=sae"
+        else
+            uci -q set "wireless.${s}.encryption=psk2"
+        fi
+    fi
+    uci -q set "wireless.${s}.key=198198ko"
+    uci -q set "wireless.${s}.disabled=0"
+done
+uci -q commit wireless
+
+# 4. Disable hardware/software flow offloading by default (prevents MT5700M USB CDC NAT desync)
+uci -q set firewall.@defaults[0].flow_offloading='0'
+uci -q set firewall.@defaults[0].flow_offloading_hw='0'
+uci -q commit firewall
+
+# 5. H5000M QModem USB slot preset & preserve SIM SMS for ModemWebUI + smsforward
+if [ -f /etc/config/qmodem ]; then
+    uci -q set qmodem.usb0='modem-slot'
+    uci -q set qmodem.usb0.slot='2-1'
+    uci -q set qmodem.usb0.type='usb'
+    uci -q set qmodem.usb0.alias='USB'
+    uci -q set qmodem.main.enable_pcie_scan='0'
+    uci -q set qmodem.main.start_delay='9'
+    for m in $(uci -q show qmodem | sed -n "s/^qmodem\.\([^.=]*\)=modem-device$/\1/p"); do
+        uci -q set "qmodem.${m}.sms_auto_delete_from_sim=0"
+    done
+    uci -q commit qmodem
+fi
+if [ -f /etc/config/sms_forwarder ]; then
+    uci -q set sms_forwarder.sms_forward.enable='0'
+    uci -q commit sms_forwarder
+fi
 exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-cleanup-legacy
 
-# 2.3 Fix python-pyserial build dependency (backport upstream fix e2ffecaab6)
-if [ -f feeds/packages/lang/python/python-pyserial/Makefile ]; then
-    sed -i 's/HOST_BUILD_DEPENDS:=.*/HOST_BUILD_DEPENDS:=python-setuptools\/host\nPKG_BUILD_DEPENDS:=python-setuptools\/host/' feeds/packages/lang/python/python-pyserial/Makefile
-fi
+# 2.3 Clone & patch MT5700/Modem WebUI (lonelysix-editor/luci-app-modemwebui)
+rm -rf package/luci-app-modemwebui package/at-webserver package/luci-app-at-webserver /tmp/modemwebui-repo
+git clone --depth 1 https://github.com/lonelysix-editor/luci-app-modemwebui.git /tmp/modemwebui-repo || exit 1
+cp -r /tmp/modemwebui-repo/luci-app-modemwebui package/luci-app-modemwebui || exit 1
+rm -rf /tmp/modemwebui-repo
 
-# 2.4 Clone MT5700 WebUI & AT Server (inotdream/mt5700webui-openwrt-server)
-rm -rf package/at-webserver package/luci-app-at-webserver
-git clone --depth 1 https://github.com/inotdream/mt5700webui-openwrt-server.git /tmp/mt5700webui-repo
-cp -r /tmp/mt5700webui-repo/at-webserver package/at-webserver
-cp -r /tmp/mt5700webui-repo/luci-app-at-webserver package/luci-app-at-webserver
-rm -rf /tmp/mt5700webui-repo
+# Normalize LF only on text files (never touch binary usr/bin/webuiserver or .lmo/.png)
+find package/luci-app-modemwebui -type f \( -name 'Makefile' -o -path '*/etc/init.d/*' -o -path '*/etc/hotplug.d/*' -o -name '*.lua' -o -name '*.htm' -o -name '*.json' -o -name '*.bak' \) -exec sed -i 's/\r$//' {} +
 
-# Replace nonexistent python3-aiohttp dependency with standard python3-urllib
-sed -i 's/+python3-aiohttp/+python3-urllib/g' package/at-webserver/Makefile
-if [ -f "${PROJECT_DIR}/scripts/patch_at_server.py" ]; then
-    python3 "${PROJECT_DIR}/scripts/patch_at_server.py" package/at-webserver/files/usr/bin/at-server.py || true
-elif [ -f "scripts/patch_at_server.py" ]; then
-    python3 scripts/patch_at_server.py package/at-webserver/files/usr/bin/at-server.py || true
-fi
+python3 - << 'EOPY' || exit 1
+import json
 
-chmod +x package/at-webserver/files/usr/bin/* package/at-webserver/files/etc/init.d/* package/at-webserver/files/www/cgi-bin/* 2>/dev/null || true
+# 1. Patch package/luci-app-modemwebui/Makefile
+mk_path = "package/luci-app-modemwebui/Makefile"
+with open(mk_path, "r", encoding="utf-8", newline="") as f:
+    mk = f.read()
+old_dep = "DEPENDS:=@aarch64 +luci-base +qmodem +usbutils +libgcc"
+new_dep = "DEPENDS:=@aarch64 +luci-base +luci-compat +luci-lua-runtime +qmodem +usbutils +libgcc +coreutils-sha1sum"
+assert old_dep in mk, f"Missing target DEPENDS in {mk_path}"
+mk = mk.replace(old_dep, new_dep, 1)
+
+install_anchor = "\t$(INSTALL_BIN) $(PKG_BUILD_DIR)/etc/init.d/modemwebui $(1)/etc/init.d/modemwebui\n"
+install_extra = (
+    "\n\t$(INSTALL_DIR) $(1)/etc/hotplug.d/iface\n"
+    "\t$(INSTALL_BIN) $(PKG_BUILD_DIR)/etc/hotplug.d/iface/99-modemwebui $(1)/etc/hotplug.d/iface/99-modemwebui\n"
+)
+assert install_anchor in mk, f"Missing install anchor in {mk_path}"
+mk = mk.replace(install_anchor, install_anchor + install_extra, 1)
+with open(mk_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(mk)
+
+# 2. Patch package/luci-app-modemwebui/etc/init.d/modemwebui
+init_path = "package/luci-app-modemwebui/etc/init.d/modemwebui"
+with open(init_path, "r", encoding="utf-8", newline="") as f:
+    init_txt = f.read()
+old_lan = "DEFAULT_LAN_ADDR=192.168.1.1"
+new_lan = "DEFAULT_LAN_ADDR=192.168.88.1"
+assert old_lan in init_txt, f"Missing {old_lan} in {init_path}"
+assert 'sed "s/192\\.168\\.1\\.1/$lan_addr/g" "${config_file}.bak"' in init_txt, f"Missing sed template in {init_path}"
+init_txt = init_txt.replace(old_lan, new_lan, 1)
+with open(init_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(init_txt)
+
+# 3. Patch both webui5700/config.json and webui000/config.json to tom_modem mode
+for cfg_path in (
+    "package/luci-app-modemwebui/www/webui/webui5700/config.json",
+    "package/luci-app-modemwebui/www/webui/webui000/config.json",
+):
+    with open(cfg_path, "r", encoding="utf-8", newline="") as f:
+        data = json.load(f)
+    assert "SERIAL" in data and "MODE" in data["SERIAL"], f"Missing SERIAL.MODE in {cfg_path}"
+    data["SERIAL"]["MODE"] = "tom_modem"
+    with open(cfg_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(data, indent=2) + "\n")
+EOPY
+
+chmod +x package/luci-app-modemwebui/etc/init.d/modemwebui package/luci-app-modemwebui/etc/hotplug.d/iface/99-modemwebui package/luci-app-modemwebui/usr/bin/webuiserver
+
+# 2.4 Clone & patch SMS Forward (snowflakexuehui/luci-app-smsforward)
+rm -rf package/smsforward package/luci-app-smsforward /tmp/smsforward-repo
+git clone --depth 1 https://github.com/snowflakexuehui/luci-app-smsforward.git /tmp/smsforward-repo || exit 1
+cp -r /tmp/smsforward-repo/smsforward package/smsforward || exit 1
+cp -r /tmp/smsforward-repo/luci-app-smsforward package/luci-app-smsforward || exit 1
+rm -rf /tmp/smsforward-repo
+
+# Strip CRLF (\r) on all text files in package/smsforward and package/luci-app-smsforward (exclude *.png)
+find package/smsforward package/luci-app-smsforward -type f ! -name '*.png' -exec sed -i 's/\r$//' {} +
+
+python3 - << 'EOPY' || exit 1
+def patch_file(path, old, new):
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        text = f.read().replace("\r\n", "\n")
+    assert old in text, f"Missing target string {old!r} in {path}"
+    text = text.replace(old, new, 1)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+
+patch_file(
+    "package/luci-app-smsforward/Makefile",
+    "LUCI_DEPENDS:=+luci +smsforward",
+    "LUCI_DEPENDS:=+luci-base +luci-compat +luci-lua-runtime +smsforward",
+)
+patch_file(
+    "package/smsforward/Makefile",
+    "  DEPENDS:=\n",
+    "  DEPENDS:=+curl +ca-bundle\n",
+)
+patch_file(
+    "package/smsforward/smsforward.c",
+    '"tom_modem -c \'%s\' -d \'%s\' -b %d 2>/dev/null"',
+    '"tom_modem -u -c \'%s\' -d \'%s\' -b %d 2>/dev/null"',
+)
+EOPY
+
+chmod +x package/luci-app-smsforward/root/etc/init.d/smsforward
+
+# 2.5 Patch QModem (feeds/qmodem) for zero-conflict ubus sharing & non-destructive SIM SMS
+python3 - << 'EOPY' || exit 1
+import os
+
+# 1. tom_modem: auto-detect active ubus at-daemon even if -u was omitted
+tom_main = "feeds/qmodem/application/tom_modem/src/main.c"
+with open(tom_main, "r", encoding="utf-8", newline="") as f:
+    text = f.read()
+
+target = (
+    "    // Default transport is TTY\n"
+    "    if (profile->transport != TRANSPORT_UBUS)\n"
+    "    {\n"
+    "        profile->transport = TRANSPORT_TTY;\n"
+    "    }"
+)
+replacement = (
+    "    // Default transport: prefer UBUS when at-daemon is active, fallback to TTY\n"
+    "    if (profile->transport != TRANSPORT_UBUS)\n"
+    "    {\n"
+    "#ifdef ENABLE_UBUS_DAEMON\n"
+    "        struct ubus_context *probe_ctx = ubus_connect(NULL);\n"
+    "        uint32_t svc_id = 0;\n"
+    "        if (probe_ctx && ubus_lookup_id(probe_ctx, UBUS_AT_DAEMON_SERVICE, &svc_id) == UBUS_STATUS_OK)\n"
+    "        {\n"
+    "            profile->transport = TRANSPORT_UBUS;\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            profile->transport = TRANSPORT_TTY;\n"
+    "        }\n"
+    "        if (probe_ctx)\n"
+    "        {\n"
+    "            ubus_free(probe_ctx);\n"
+    "        }\n"
+    "#else\n"
+    "        profile->transport = TRANSPORT_TTY;\n"
+    "#endif\n"
+    "    }"
+)
+assert target in text, f"Target block not found in {tom_main}"
+text = text.replace(target, replacement, 1)
+with open(tom_main, "w", encoding="utf-8", newline="\n") as f:
+    f.write(text)
+
+# 2. qmodem_smsd: default sms_auto_delete_from_sim to 0 (non-destructive)
+smsd_main = "feeds/qmodem/application/qmodem_smsd/src/main.c"
+with open(smsd_main, "r", encoding="utf-8", newline="") as f:
+    smsd_text = f.read()
+old_smsd = '"sms_auto_delete_from_sim", "1"'
+new_smsd = '"sms_auto_delete_from_sim", "0"'
+assert old_smsd in smsd_text, f"Target string not found in {smsd_main}"
+smsd_text = smsd_text.replace(old_smsd, new_smsd, 1)
+with open(smsd_main, "w", encoding="utf-8", newline="\n") as f:
+    f.write(smsd_text)
+
+# 3. Optional ucode qmodem_sms fallback if present
+ucode_sms = "feeds/qmodem/application/qmodem/files/usr/share/rpcd/ucode/qmodem_sms"
+if os.path.exists(ucode_sms):
+    with open(ucode_sms, "r", encoding="utf-8", newline="") as f:
+        uc_text = f.read()
+    old_uc = "cfg.sms_auto_delete_from_sim != '0'"
+    new_uc = "cfg.sms_auto_delete_from_sim == '1'"
+    assert old_uc in uc_text, f"Target string not found in {ucode_sms}"
+    uc_text = uc_text.replace(old_uc, new_uc, 1)
+    with open(ucode_sms, "w", encoding="utf-8", newline="\n") as f:
+        f.write(uc_text)
+EOPY
+
+# 2.6 Build-time Base System Defaults (LAN IP 192.168.88.1, root password root, Wi-Fi password 198198ko)
+sed -i 's/192\.168\.1\.1/192.168.88.1/g' package/base-files/files/bin/config_generate || exit 1
+grep -q '192\.168\.88\.1' package/base-files/files/bin/config_generate || exit 1
+
+python3 - << 'EOPY' || exit 1
+import subprocess
+
+# 1. Default root password = root
+shadow_path = "package/base-files/files/etc/shadow"
+hashed = subprocess.check_output(["openssl", "passwd", "-1", "root"], text=True).strip()
+assert hashed.startswith("$1$"), f"Unexpected openssl hash: {hashed!r}"
+with open(shadow_path, "r", encoding="utf-8", newline="") as f:
+    lines = f.read().splitlines(keepends=True)
+replaced_shadow = False
+new_lines = []
+for line in lines:
+    if line.startswith("root:"):
+        new_lines.append(f"root:{hashed}:19999:0:99999:7:::\n")
+        replaced_shadow = True
+    else:
+        new_lines.append(line)
+assert replaced_shadow, f"root: line not found in {shadow_path}"
+with open(shadow_path, "w", encoding="utf-8", newline="\n") as f:
+    f.writelines(new_lines)
+
+# 2. Unified Wi-Fi defaults (psk2 / sae on 6g, key = 198198ko)
+mac80211_path = "package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
+with open(mac80211_path, "r", encoding="utf-8", newline="") as f:
+    mac_text = f.read()
+
+replacements = [
+    ("encryption = 'owe';", "encryption = 'sae';"),
+    ("encryption = 'none';", "encryption = 'psk2';"),
+    (
+        "set ${si}.encryption='${defaults?.encryption || encryption}'",
+        "set ${si}.encryption='${band_name == \"6g\" ? \"sae\" : \"psk2\"}'",
+    ),
+    (
+        "set ${si}.key='${defaults?.key || \"\"}'",
+        "set ${si}.key='198198ko'",
+    ),
+]
+for old, new in replacements:
+    assert old in mac_text, f"Missing target {old!r} in {mac80211_path}"
+    mac_text = mac_text.replace(old, new, 1)
+
+with open(mac80211_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(mac_text)
+EOPY
 
 # 3. Clone OpenList & LuCI App (Official OpenListTeam)
 echo "Configuring OpenList..."
