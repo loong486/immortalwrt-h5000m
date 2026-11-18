@@ -49,17 +49,17 @@ mkdir -p files/etc/uci-defaults
 cat << 'EOF' > files/etc/uci-defaults/99-cleanup-legacy
 #!/bin/sh
 rm -rf /tmp/luci-modulecache /tmp/luci-indexcache*
-if [ -x /etc/init.d/at-webserver ]; then
-    /etc/init.d/at-webserver stop >/dev/null 2>&1 || true
-    /etc/init.d/at-webserver disable >/dev/null 2>&1 || true
-fi
-if [ -x /etc/init.d/momo ]; then
-    /etc/init.d/momo stop >/dev/null 2>&1 || true
-    /etc/init.d/momo disable >/dev/null 2>&1 || true
-fi
+for svc in at-webserver momo openlist frpc; do
+    if [ -x "/etc/init.d/${svc}" ]; then
+        "/etc/init.d/${svc}" stop >/dev/null 2>&1 || true
+        "/etc/init.d/${svc}" disable >/dev/null 2>&1 || true
+    fi
+done
 rm -f /etc/init.d/at-webserver /etc/rc.d/*at-webserver* /etc/config/at-webserver /usr/bin/at-server.py
 rm -f /etc/init.d/momo /etc/rc.d/*momo* /etc/config/momo
-rm -rf /www/5700 /etc/momo /var/log/momo /var/run/momo
+rm -f /etc/init.d/openlist /etc/rc.d/*openlist* /etc/config/openlist
+rm -f /etc/init.d/frpc /etc/rc.d/*frpc* /etc/config/frpc
+rm -rf /www/5700 /etc/momo /var/log/momo /var/run/momo /etc/openlist /var/run/openlist
 if uci -q get firewall.momo >/dev/null 2>&1; then
     uci -q delete firewall.momo
     uci -q commit firewall
@@ -335,16 +335,7 @@ with open(mac80211_path, "w", encoding="utf-8", newline="\n") as f:
     f.write(mac_text)
 EOPY
 
-# 3. Clone OpenList & LuCI App (Official OpenListTeam)
-echo "Configuring OpenList..."
-rm -rf feeds/packages/net/openlist
-rm -rf package/feeds/packages/openlist
-rm -rf feeds/luci/applications/luci-app-openlist
-rm -rf package/feeds/luci/luci-app-openlist
-rm -rf package/openlist
-git clone --depth 1 https://github.com/OpenListTeam/OpenList-OpenWRT.git package/openlist
-
-# 3.5 Pre-install official prebuilt llvm-bpf toolchain (avoids 70-min LLVM source build & runner OOM)
+# 3. Pre-install official prebuilt llvm-bpf toolchain (avoids 70-min LLVM source build & runner OOM)
 if [ -f tools/llvm-bpf/Makefile ]; then
     LLVM_BPF_VER=$(sed -n 's/^PKG_VERSION:=//p' tools/llvm-bpf/Makefile | head -n1 | tr -d '[:space:]')
     LLVM_BPF_TAR="llvm-bpf-${LLVM_BPF_VER}.Linux-x86_64.tar.zst"
@@ -407,9 +398,10 @@ rm -rf feeds/luci/applications/luci-app-mosdns package/feeds/luci/luci-app-mosdn
 ./scripts/feeds install -a -f -p mosdns
 [ -f package/feeds/mosdns/mosdns/Makefile ] && [ -f package/feeds/mosdns/geo2txt/Makefile ] && [ -f package/feeds/mosdns/luci-app-mosdns/Makefile ] || exit 1
 
-# 7. Clean up removed plugins (honk, daede, momo, mt5700m) to prevent leftover builds
+# 7. Clean up removed plugins (honk, daede, momo, mt5700m, openlist) to prevent leftover builds
 rm -rf package/honk package/luci-app-honk package/luci-lib-daeuniverse
 rm -rf package/daede
+rm -rf package/openlist feeds/packages/net/openlist package/feeds/packages/openlist feeds/luci/applications/luci-app-openlist package/feeds/luci/luci-app-openlist
 rm -rf feeds/momo package/feeds/momo package/momo package/luci-app-momo
 rm -rf package/luci-app-mt5700m feeds/luci/applications/luci-app-mt5700m package/feeds/luci/luci-app-mt5700m
 rm -rf feeds/packages/net/dae feeds/packages/net/daed feeds/luci/applications/luci-app-dae feeds/luci/applications/luci-app-daed

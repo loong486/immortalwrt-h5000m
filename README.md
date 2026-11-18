@@ -75,9 +75,8 @@
 * **MosDNS v5 ([sbwml/luci-app-mosdns](https://github.com/sbwml/luci-app-mosdns))**：集成带 `adblock_set` 与缓存预取增强补丁的 `mosdns 5.3.4` + `geo2txt`，实现国内外 Real-IP 精准分流解析、防 DNS 污染/泄漏及 IPv6 `AAAA` 按需过滤，开关代理无需清理 FakeIP 缓存。
 * 预置 `zoneinfo-asia` 时区数据库，确保 Go 核心程序日志时间与 `Asia/Shanghai` 完全一致。
 
-### 5. 📂 生产力与文件服务 (OpenList & FRP)
-* **OpenList 4.2.6**：内置官方最新版本，支持将阿里云盘、115、百度网盘、WebDAV、本地移动硬盘等统一聚合挂载，支持 Web 浏览与本地 FUSE 映射。
-* **FRP 内网穿透**：集成 `luci-app-frpc`，配合远端 VPS 实现无公网 IP 场景下的安全内网穿透。
+### 5. 🛡️ AdGuard Home 全网过滤与端口映射
+* **AdGuard Home (`luci-app-adguardhome` + `adguardhome`)**：集成 ImmortalWrt 官方最新 AdGuard Home v0.107+，提供全网 DNS 广告拦截、追踪器屏蔽与可视化查询日志。默认处于关闭状态以避免与 `dnsmasq` / `MosDNS` 抢占 `53` 端口；需要启用时可在 **服务 → AdGuard Home** 中配置并打开初始化向导（`:3000`）按需对接 DNS 端口。
 * **MiniUPnPd (nftables)**：完美适配 Firewall4，游戏主机与下载工具端口自动映射。
 
 ---
@@ -94,8 +93,7 @@
 | **网络代理** | `luci-app-passwall` | Openwrt-Passwall | [Openwrt-Passwall/openwrt-passwall](https://github.com/Openwrt-Passwall/openwrt-passwall) | 基于 nftables 的全功能透明分流代理 |
 | **DNS 分流** | `luci-app-mosdns` / `mosdns` | sbwml / IrineSistiana | [sbwml/luci-app-mosdns](https://github.com/sbwml/luci-app-mosdns) | MosDNS v5 无污染国内外 DNS 分流与广告过滤 |
 | **代理内核** | `xray-core` / `sing-box` (v1.14.4) | XTLS / SagerNet | [XTLS/Xray-core](https://github.com/XTLS/Xray-core) • [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 双核心现代全协议代理引擎 |
-| **聚合网盘** | `luci-app-openlist` / `openlist` | OpenListTeam | [OpenListTeam/OpenList-OpenWRT](https://github.com/OpenListTeam/OpenList-OpenWRT) | 多存储与网盘聚合管理系统 |
-| **内网穿透** | `luci-app-frpc` / `frpc` | fatedier | [fatedier/frp](https://github.com/fatedier/frp) | 高性能反向代理通道 |
+| **DNS 广告拦截** | `luci-app-adguardhome` / `adguardhome` | AdguardTeam / ImmortalWrt | [AdguardTeam/AdGuardHome](https://github.com/AdguardTeam/AdGuardHome) | 全网 DNS 广告与追踪器过滤拦截服务 |
 | **端口映射** | `miniupnpd-nftables` | Thomas Bernard | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | Firewall4 原生 UPnP IGD 映射服务 |
 
 ---
@@ -112,7 +110,7 @@
 1. 从 GitHub 仓库的 **[Releases](https://github.com/loong486/immortalwrt-h5000m/releases)** 页面下载最新的 `sysupgrade.bin` 固件包。
 2. 进入路由器后台：**系统 → 备份/升级 → 刷写固件**。
 3. 上传固件包，**勾选“保留配置”**，确认刷写。
-4. > **提示**：固件内置了自动化迁移清理脚本（`99-cleanup-legacy`），首次启动会自动清理旧版 `at-webserver`（`/www/5700`）、`momo` 等残留文件与过期 feed 源、应用默认接入参数（`192.168.88.1` / `root` / Wi-Fi 密码 `198198ko`）及禁用硬件加速流控（防止 MT5700M USB CDC NAT 断流），同时保留您的 PassWall / MosDNS、FRP 等核心业务配置。
+4. > **提示**：固件内置了自动化迁移清理脚本（`99-cleanup-legacy`），首次启动会自动清理旧版 `at-webserver`（`/www/5700`）、`momo`、`openlist`、`frpc` 等残留文件与过期 feed 源、应用默认接入参数（`192.168.88.1` / `root` / Wi-Fi 密码 `198198ko`）及禁用硬件加速流控（防止 MT5700M USB CDC NAT 断流），同时保留您的 PassWall / MosDNS / AdGuard Home 等核心业务配置。
 
 ### 3. 全新安装 (不保留配置)
 首次从官方原厂固件或其他第三方固件切换时，建议取消勾选“保留配置”进行全新刷写，以获得最纯净稳定的运行环境。
