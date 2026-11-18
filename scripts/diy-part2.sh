@@ -53,12 +53,21 @@ if [ -x /etc/init.d/at-webserver ]; then
     /etc/init.d/at-webserver stop >/dev/null 2>&1 || true
     /etc/init.d/at-webserver disable >/dev/null 2>&1 || true
 fi
+if [ -x /etc/init.d/momo ]; then
+    /etc/init.d/momo stop >/dev/null 2>&1 || true
+    /etc/init.d/momo disable >/dev/null 2>&1 || true
+fi
 rm -f /etc/init.d/at-webserver /etc/rc.d/*at-webserver* /etc/config/at-webserver /usr/bin/at-server.py
-rm -rf /www/5700
+rm -f /etc/init.d/momo /etc/rc.d/*momo* /etc/config/momo
+rm -rf /www/5700 /etc/momo /var/log/momo /var/run/momo
+if uci -q get firewall.momo >/dev/null 2>&1; then
+    uci -q delete firewall.momo
+    uci -q commit firewall
+fi
 rm -f /etc/config/mt5700m /etc/config/qmodem_generic /etc/config/honk
 rm -rf /etc/honk /usr/lib/debug/boot/vmlinux
 rm -f /etc/apk/repositories.d/daeuniverse.list /etc/apk/keys/daeuniverse.pem
-sed -i '/qmodem/d;/video/d;/momo/d;/daeuniverse/d' /etc/apk/repositories.d/*.list /etc/apk/repositories 2>/dev/null
+sed -i '/qmodem/d;/video/d;/momo/d;/mosdns/d;/daeuniverse/d' /etc/apk/repositories.d/*.list /etc/apk/repositories 2>/dev/null
 
 # 1. Default LAN IP = 192.168.88.1
 uci -q set network.lan.ipaddr='192.168.88.1'
@@ -391,13 +400,19 @@ else
     echo "Warning: sing-box Makefile not found at ${SING_BOX_MK}"
 fi
 
-# 7. Clean up removed plugins (honk, daede, mosdns, passwall, mt5700m) to prevent leftover builds
+# 6.5 Configure sbwml MosDNS v5 (prioritize patched mosdns + geo2txt + luci-app-mosdns over upstream packages feed)
+echo "Configuring sbwml MosDNS v5..."
+rm -rf feeds/packages/net/mosdns package/feeds/packages/mosdns
+rm -rf feeds/luci/applications/luci-app-mosdns package/feeds/luci/luci-app-mosdns
+./scripts/feeds install -a -f -p mosdns
+[ -f package/feeds/mosdns/mosdns/Makefile ] && [ -f package/feeds/mosdns/geo2txt/Makefile ] && [ -f package/feeds/mosdns/luci-app-mosdns/Makefile ] || exit 1
+
+# 7. Clean up removed plugins (honk, daede, momo, mt5700m) to prevent leftover builds
 rm -rf package/honk package/luci-app-honk package/luci-lib-daeuniverse
 rm -rf package/daede
+rm -rf feeds/momo package/feeds/momo package/momo package/luci-app-momo
 rm -rf package/luci-app-mt5700m feeds/luci/applications/luci-app-mt5700m package/feeds/luci/luci-app-mt5700m
 rm -rf feeds/packages/net/dae feeds/packages/net/daed feeds/luci/applications/luci-app-dae feeds/luci/applications/luci-app-daed
 rm -rf package/feeds/packages/dae package/feeds/packages/daed package/feeds/luci/luci-app-dae package/feeds/luci/luci-app-daed
-rm -rf feeds/packages/net/mosdns feeds/luci/applications/luci-app-mosdns package/feeds/packages/mosdns package/feeds/luci/luci-app-mosdns
-rm -rf feeds/luci/applications/luci-app-passwall package/feeds/luci/luci-app-passwall
 
 echo "DIY Part 2 setup completed successfully."

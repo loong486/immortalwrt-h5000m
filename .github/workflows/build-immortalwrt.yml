@@ -147,7 +147,8 @@ jobs:
         echo "  - \`luci-app-qmodem-next\` + \`qmodem\` (QModem 最新 5G 模组控制协议栈与 ubus-at-daemon 无冲突总线)" >> release.txt
         echo "  - \`luci-app-modemwebui\` + \`webuiserver\` (MT5700 独立现代 WebUI 看板 \`:8001\`，对接 \`tom_modem\` / \`ubus\` 总线)" >> release.txt
         echo "  - \`luci-app-smsforward\` + \`smsforward\` (独立多通道短信自动转发：Bark / 企业微信 / 钉钉 / 飞书 / Telegram / PushPlus / Server酱等)" >> release.txt
-        echo "  - \`luci-app-momo\` (Momo with sing-box 1.14.4 高性能 nftables 透明代理)" >> release.txt
+        echo "  - \`luci-app-passwall\` (PassWall 搭配 Xray + sing-box 1.14.4 双核心分流代理)" >> release.txt
+        echo "  - \`luci-app-mosdns\` (MosDNS v5 高性能无污染 DNS 分流与防泄漏)" >> release.txt
         echo "  - \`luci-app-openlist\` (OpenList 4.2.6 多存储/网盘聚合文件管理系统)" >> release.txt
         echo "  - \`luci-app-frpc\` (FRP 反向代理内网穿透通道)" >> release.txt
         echo "  - \`luci-app-upnp\` (MiniUPnPd nftables 端口映射)" >> release.txt
