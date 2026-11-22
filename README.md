@@ -58,8 +58,8 @@
   - 官方现代响应式管理后台，提供模组拨号管理、实时射频监控与会话式短信收发。
   - 默认禁用 SIM 卡短信自动删除（`sms_auto_delete_from_sim=0`），确保 QModem、ModemWebUI 与 SmsForward 三方均可完整读取短信而互不干扰。
 * **MT5700 独立现代 WebUI 看板 ([lonelysix-editor/luci-app-modemwebui](https://github.com/lonelysix-editor/luci-app-modemwebui))**：
-  - 集成 `luci-app-modemwebui` 与原生 ARM64 后端 `webuiserver`（全面取代旧版 Python `at-webserver`），可通过 LuCI **调制解调器 → ModemWebUI** 或直接访问 `http://192.168.88.1:8001/` 打开。
-  - 运行于 `tom_modem` 模式并直接对接 QModem 的 `ubus-at-daemon` 总线，提供专属可视化信号仪表盘、载波聚合 (CA) 状态监控、频段/小区锁定及交互式 AT 终端。
+  - 集成 `luci-app-modemwebui` 与原生 ARM64 后端 `webuiserver`（全面取代旧版 Python `at-webserver`），在 LuCI 点击 **调制解调器 → ModemWebUI** 直接在新标签页全屏打开 `http://<路由器地址>:8001/`（告别主题错位内嵌框），也可直接访问 `http://192.168.88.1:8001/`。
+  - 运行于 `PORT=qmodem` + `MODE=tom_modem` 模式并直接对接 QModem `ubus-at-daemon` 总线，结合 QModem `post_init` 钩子自动追踪冷启动 USB 重枚举后的动态 AT 端口并重载服务（同时将前端 AT 指令超时提升至 `5s`），提供专属可视化信号仪表盘、载波聚合 (CA) 状态监控、短信开关管理、频段/小区锁定及交互式 AT 终端。
 
 ### 3. 📩 全自动多通道短信转发 (`luci-app-smsforward`)
 * 集成独立开源插件 **[snowflakexuehui/luci-app-smsforward](https://github.com/snowflakexuehui/luci-app-smsforward)**（`luci-app-smsforward` + C 语言守护进程 `smsforward`），收到运营商流量提醒、验证码或欠费短信时即时推送到随身设备。
@@ -125,8 +125,8 @@
 * 固件默认禁用 SIM 卡短信自动删除（`sms_auto_delete_from_sim=0`），并关闭了防火墙软件/硬件流控（Flow Offloading），保证 USB CDC 网卡 NAT 稳定以及 QModem、ModemWebUI 与 SmsForward 三端同时读取短信不冲突。
 
 ### 🎛️ MT5700 独立看板 (ModemWebUI)
-* **访问方式**：在 LuCI 后台进入 **调制解调器 → ModemWebUI**，或浏览器直接打开 `http://192.168.88.1:8001/` 即可进入专属 MT5700 管理控制台。
-* **零冲突架构**：后台由原生 ARM64 守护进程 `/usr/bin/webuiserver` 驱动，开机自动探测 MT5700M 并按当前路由器 LAN IP（默认 `192.168.88.1`）生成前端配置；默认启用 `tom_modem` 模式直接对接 QModem `ubus-at-daemon` 总线，开箱即用，无需再手工配置串口或 Python 代理。
+* **访问方式**：在 LuCI 后台点击 **调制解调器 → ModemWebUI** 即可直接在新窗口打开专属 MT5700 管理控制台（或浏览器直接访问 `http://192.168.88.1:8001/`）。
+* **零冲突动态端口架构**：后台由原生 ARM64 守护进程 `/usr/bin/webuiserver` 驱动，开机自动探测 MT5700M 并按当前路由器 LAN IP（默认 `192.168.88.1`）生成前端配置；默认启用 `PORT=qmodem` + `MODE=tom_modem` 模式直接对接 QModem `ubus-at-daemon` 总线，并在 USB 重枚举触发 QModem `post_init` 时自动同步最新 AT 端口并平滑重载服务，开箱即用，无需手工配置串口或 Python 代理。
 
 ### 📩 配置短信自动转发 (SmsForward)
 1. 进入后台：**调制解调器 → 短信转发**（系统已默认关闭 QModem 自带旧版 `sms_forwarder` 开关，避免重复推送）。

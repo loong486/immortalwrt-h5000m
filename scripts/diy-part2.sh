@@ -130,7 +130,9 @@ rm -rf /tmp/modemwebui-repo
 find package/luci-app-modemwebui -type f \( -name 'Makefile' -o -path '*/etc/init.d/*' -o -path '*/etc/hotplug.d/*' -o -name '*.lua' -o -name '*.htm' -o -name '*.json' -o -name '*.bak' \) -exec sed -i 's/\r$//' {} +
 
 python3 - << 'EOPY' || exit 1
+import glob
 import json
+import os
 
 # 1. Patch package/luci-app-modemwebui/Makefile
 mk_path = "package/luci-app-modemwebui/Makefile"
@@ -148,6 +150,15 @@ install_extra = (
 )
 assert install_anchor in mk, f"Missing install anchor in {mk_path}"
 mk = mk.replace(install_anchor, install_anchor + install_extra, 1)
+
+www_install_anchor = "\t$(CP) $(PKG_BUILD_DIR)/www/. $(1)/www/\n"
+assert www_install_anchor in mk, f"Missing www install rule in {mk_path}"
+
+postinst_anchor = '\tln -sf ../init.d/modemwebui "$${IPKG_INSTROOT}/etc/rc.d/S99modemwebui"\n'
+postinst_extra = '\tln -sf ../init.d/modemwebui "$${IPKG_INSTROOT}/etc/rc.d/K10modemwebui"\n'
+assert postinst_anchor in mk, f"Missing postinst symlink anchor in {mk_path}"
+mk = mk.replace(postinst_anchor, postinst_anchor + postinst_extra, 1)
+
 with open(mk_path, "w", encoding="utf-8", newline="\n") as f:
     f.write(mk)
 
@@ -156,24 +167,339 @@ init_path = "package/luci-app-modemwebui/etc/init.d/modemwebui"
 with open(init_path, "r", encoding="utf-8", newline="") as f:
     init_txt = f.read()
 old_lan = "DEFAULT_LAN_ADDR=192.168.1.1"
-new_lan = "DEFAULT_LAN_ADDR=192.168.88.1"
+new_lan = """DEFAULT_LAN_ADDR=192.168.88.1
+AT_PORT_FILE=/var/run/modemwebui.at_port
+
+get_qmodem_at_port() {
+    local at_port fallback sec
+
+    at_port=$(uci -q get qmodem.@modem-device[0].at_port 2>/dev/null)
+    if [ -n "$at_port" ] && [ -e "$at_port" ]; then
+        echo "$at_port"
+        return 0
+    fi
+    fallback="$at_port"
+
+    for sec in $(uci -q show qmodem 2>/dev/null | sed -n "s/^qmodem\\.\\([^.=]*\\)=modem-device$/\\1/p"); do
+        at_port=$(uci -q get "qmodem.${sec}.at_port" 2>/dev/null)
+        if [ -n "$at_port" ] && [ -e "$at_port" ]; then
+            echo "$at_port"
+            return 0
+        fi
+        [ -z "$fallback" ] && [ -n "$at_port" ] && fallback="$at_port"
+    done
+
+    [ -n "$fallback" ] && echo "$fallback"
+}"""
 assert old_lan in init_txt, f"Missing {old_lan} in {init_path}"
 assert 'sed "s/192\\.168\\.1\\.1/$lan_addr/g" "${config_file}.bak"' in init_txt, f"Missing sed template in {init_path}"
 init_txt = init_txt.replace(old_lan, new_lan, 1)
+
+old_start_instance = (
+    "start_service_instance() {\n"
+    "    local CONFIG_FILE=$1\n"
+    "    \n"
+    "    sleep 6\n"
+    '    write_web_config "$CONFIG_FILE"\n'
+    "    \n"
+    "    # 使用procd启动服务，支持自动重启\n"
+    "    # 通过sh -c在webuiserver所在目录执行，使用相对路径启动\n"
+    "    procd_open_instance\n"
+    '    procd_set_param command /bin/sh -c "cd \'$(dirname "$CONFIG_FILE")/../\' && exec \'/usr/bin/webuiserver\'"\n'
+    "    procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-0}\n"
+    "    procd_set_param stdout 1\n"
+    "    procd_set_param stderr 1\n"
+    "    procd_close_instance\n"
+    "    \n"
+    "    sleep 1\n"
+    "    rm -rf /tmp/luci-*\n"
+    "}"
+)
+new_start_instance = """start_service_instance() {
+    local CONFIG_FILE=$1
+    local at_port wait_sec=0
+
+    at_port=$(get_qmodem_at_port)
+    while [ "$wait_sec" -lt 15 ]; do
+        if [ -n "$at_port" ] && [ -e "$at_port" ]; then
+            break
+        fi
+        sleep 1
+        wait_sec=$((wait_sec + 1))
+        at_port=$(get_qmodem_at_port)
+    done
+
+    if [ -n "$at_port" ] && [ -e "$at_port" ]; then
+        printf '%s\\n' "$at_port" > "$AT_PORT_FILE"
+    else
+        rm -f "$AT_PORT_FILE"
+    fi
+
+    write_web_config "$CONFIG_FILE"
+
+    # 使用procd启动服务，支持自动重启
+    # 通过sh -c在webuiserver所在目录执行，使用相对路径启动
+    procd_open_instance
+    procd_set_param command /bin/sh -c "cd '$(dirname "$CONFIG_FILE")/../' && exec '/usr/bin/webuiserver'"
+    [ -n "$at_port" ] && procd_set_param env AT_PORT="$at_port"
+    procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-0}
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}"""
+assert old_start_instance in init_txt, f"Missing start_service_instance block in {init_path}"
+init_txt = init_txt.replace(old_start_instance, new_start_instance, 1)
+
+old_triggers_and_hooks = (
+    "service_triggers() {\n"
+    "    procd_add_reload_trigger network\n"
+    "}\n"
+    "\n"
+    "reload_service() {\n"
+    "    write_all_web_configs\n"
+    "    rm -rf /tmp/luci-*\n"
+    "}\n"
+    "\n"
+    "stop_service() {\n"
+    "    # procd会自动处理停止\n"
+    "    return 0\n"
+    "} "
+)
+new_triggers_and_hooks = """service_triggers() {
+    procd_add_reload_trigger network qmodem
+}
+
+service_started() {
+    sleep 1
+    rm -rf /tmp/luci-*
+}
+
+reload_service() {
+    local cur_port prev_port need_restart=0
+
+    write_all_web_configs
+    rm -rf /tmp/luci-*
+
+    cur_port=$(get_qmodem_at_port)
+    prev_port=""
+    [ -f "$AT_PORT_FILE" ] && prev_port=$(cat "$AT_PORT_FILE" 2>/dev/null)
+
+    if [ -n "$cur_port" ] && [ -e "$cur_port" ]; then
+        if pidof webuiserver >/dev/null 2>&1; then
+            if [ "$cur_port" != "$prev_port" ]; then
+                need_restart=1
+            elif [ -n "$prev_port" ] && [ ! -e "$prev_port" ]; then
+                need_restart=1
+            fi
+        elif enabled 2>/dev/null || [ -L /etc/rc.d/S99modemwebui ]; then
+            need_restart=1
+        fi
+    fi
+
+    if [ "$need_restart" = "1" ]; then
+        restart
+    fi
+}
+
+stop_service() {
+    rm -f "$AT_PORT_FILE"
+    return 0
+}
+
+service_stopped() {
+    local wait_sec=0
+
+    while [ "$wait_sec" -lt 6 ] && pidof webuiserver >/dev/null 2>&1; do
+        sleep 1
+        wait_sec=$((wait_sec + 1))
+    done
+}"""
+assert old_triggers_and_hooks in init_txt, f"Missing service_triggers/reload_service/stop_service block in {init_path}"
+init_txt = init_txt.replace(old_triggers_and_hooks, new_triggers_and_hooks, 1)
+
 with open(init_path, "w", encoding="utf-8", newline="\n") as f:
     f.write(init_txt)
 
-# 3. Patch both webui5700/config.json and webui000/config.json to tom_modem mode
+# 3. Patch both webui5700/config.json and webui000/config.json to qmodem + tom_modem mode
 for cfg_path in (
     "package/luci-app-modemwebui/www/webui/webui5700/config.json",
     "package/luci-app-modemwebui/www/webui/webui000/config.json",
 ):
     with open(cfg_path, "r", encoding="utf-8", newline="") as f:
         data = json.load(f)
-    assert "SERIAL" in data and "MODE" in data["SERIAL"], f"Missing SERIAL.MODE in {cfg_path}"
+    assert "SERIAL" in data and "PORT" in data["SERIAL"] and "MODE" in data["SERIAL"], f"Missing SERIAL.PORT/MODE in {cfg_path}"
+    data["SERIAL"]["PORT"] = "qmodem"
     data["SERIAL"]["MODE"] = "tom_modem"
     with open(cfg_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(data, indent=2) + "\n")
+
+# 4. Bump webui5700 AT commandTimeout from 1000ms to 5000ms (AT+CFUN=0/1 during SMS toggle can exceed 1s)
+umi_files = sorted(glob.glob("package/luci-app-modemwebui/www/webui/webui5700/web/umi.*.js"))
+assert len(umi_files) == 1, f"Expected 1 webui5700 umi.*.js bundle, found: {umi_files}"
+umi_path = umi_files[0]
+with open(umi_path, "r", encoding="utf-8", newline="") as f:
+    umi_txt = f.read()
+old_timeout = ',"commandTimeout",1e3)'
+new_timeout = ',"commandTimeout",5e3)'
+assert umi_txt.count(old_timeout) == 1, f"Expected exact 1 occurrence of {old_timeout!r} in {umi_path}"
+umi_txt = umi_txt.replace(old_timeout, new_timeout, 1)
+with open(umi_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(umi_txt)
+
+# 5. Patch LuCI controller menu order (10 -> 20 so QModem stays firstchild under admin/modem)
+ctrl_path = "package/luci-app-modemwebui/usr/lib/lua/luci/controller/modemwebui.lua"
+with open(ctrl_path, "r", encoding="utf-8", newline="") as f:
+    ctrl_txt = f.read()
+old_entry = 'entry({"admin", "modem", "modemwebui"}, template("modemwebui/modemwebui"), _("ModemWebUI"), 10).leaf = true'
+new_entry = 'entry({"admin", "modem", "modemwebui"}, template("modemwebui/modemwebui"), _("ModemWebUI"), 20).leaf = true'
+assert old_entry in ctrl_txt, f"Missing target entry in {ctrl_path}"
+ctrl_txt = ctrl_txt.replace(old_entry, new_entry, 1)
+with open(ctrl_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(ctrl_txt)
+
+# 6. Replace cramped Argon-hardcoded iframe view with clean new-window launcher page
+view_path = "package/luci-app-modemwebui/usr/lib/lua/luci/view/modemwebui/modemwebui.htm"
+with open(view_path, "r", encoding="utf-8", newline="") as f:
+    old_view = f.read()
+assert "embedded-iframe" in old_view, f"Unexpected upstream view content in {view_path}"
+new_view = """<%+header%>
+<div class="cbi-map">
+\t<h2><%:ModemWebUI%></h2>
+\t<div class="cbi-section">
+\t\t<div class="cbi-section-node">
+\t\t\t<p id="modemwebui-status" style="margin: 0 0 1em 0;">正在新窗口打开 ModemWebUI…</p>
+\t\t\t<p style="margin: 0 0 1.2em 0;">
+\t\t\t\t<span>目标地址：</span>
+\t\t\t\t<a id="modemwebui-url-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+\t\t\t</p>
+\t\t\t<div>
+\t\t\t\t<a id="modemwebui-open-btn" class="btn cbi-button cbi-button-action" href="#" target="_blank" rel="noopener noreferrer">在新窗口打开 ModemWebUI</a>
+\t\t\t</div>
+\t\t</div>
+\t</div>
+</div>
+<script>
+(function () {
+\tvar host = window.location.hostname;
+\tif (host.indexOf(':') !== -1 && host.charAt(0) !== '[') {
+\t\thost = '[' + host + ']';
+\t}
+\tvar targetUrl = 'http://' + host + ':8001/';
+
+\tvar btn = document.getElementById('modemwebui-open-btn');
+\tvar link = document.getElementById('modemwebui-url-link');
+\tvar statusEl = document.getElementById('modemwebui-status');
+
+\tif (btn) btn.href = targetUrl;
+\tif (link) {
+\t\tlink.href = targetUrl;
+\t\tlink.textContent = targetUrl;
+\t}
+
+\tvar win = null;
+\ttry {
+\t\twin = window.open(targetUrl, '_blank');
+\t\tif (win) {
+\t\t\ttry { win.opener = null; } catch (e) {}
+\t\t}
+\t} catch (e) {
+\t\twin = null;
+\t}
+
+\tif (statusEl) {
+\t\tstatusEl.textContent = win
+\t\t\t? '已尝试在新窗口打开 ModemWebUI；若未自动切换，请点击下方按钮。'
+\t\t\t: '浏览器已拦截自动弹窗，请点击下方按钮在新窗口打开 ModemWebUI。';
+\t}
+})();
+</script>
+<%+footer%>
+"""
+with open(view_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(new_view)
+
+# 7. Add LuCI preload hook so Modem -> ModemWebUI opens http://<host>:8001/ directly in a new tab
+preload_path = "package/luci-app-modemwebui/www/luci-static/resources/preload/modemwebui.js"
+os.makedirs(os.path.dirname(preload_path), exist_ok=True)
+preload_js = """'use strict';
+'require baseclass';
+'require ui';
+
+return baseclass.extend({
+\t__init__: function() {
+\t\tvar host = window.location.hostname;
+\t\tif (host.indexOf(':') !== -1 && host.charAt(0) !== '[')
+\t\t\thost = '[' + host + ']';
+\t\tvar targetUrl = 'http://' + host + ':8001/';
+\t\tvar pathRe = /\\/admin\\/modem\\/modemwebui\\/?$/;
+
+\t\tfunction patchLinks(root) {
+\t\t\tvar links = (root || document).querySelectorAll('a[href]');
+\t\t\tvar found = false;
+\t\t\tfor (var i = 0; i < links.length; i++) {
+\t\t\t\tvar a = links[i];
+\t\t\t\tvar href = a.getAttribute('href') || '';
+\t\t\t\tif (a.dataset.modemwebuiPatched === '1') {
+\t\t\t\t\tfound = true;
+\t\t\t\t\tcontinue;
+\t\t\t\t}
+\t\t\t\tif (pathRe.test(href)) {
+\t\t\t\t\ta.href = targetUrl;
+\t\t\t\t\ta.target = '_blank';
+\t\t\t\t\ta.rel = 'noopener noreferrer';
+\t\t\t\t\ta.dataset.modemwebuiPatched = '1';
+\t\t\t\t\tfound = true;
+\t\t\t\t}
+\t\t\t}
+\t\t\treturn found;
+\t\t}
+
+\t\t// Race-free fallback if user clicks before menu link is rewritten
+\t\tdocument.addEventListener('click', function(ev) {
+\t\t\tif (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey)
+\t\t\t\treturn;
+\t\t\tvar a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+\t\t\tif (!a || a.dataset.modemwebuiPatched === '1')
+\t\t\t\treturn;
+\t\t\tvar href = a.getAttribute('href') || '';
+\t\t\tif (pathRe.test(href)) {
+\t\t\t\tev.preventDefault();
+\t\t\t\twindow.open(targetUrl, '_blank', 'noopener,noreferrer');
+\t\t\t}
+\t\t}, true);
+
+\t\tpatchLinks(document);
+
+\t\tvar obsTarget = document.getElementById('topmenu') || document.getElementById('mainmenu') || document.body;
+\t\tvar observer = null;
+\t\tif (obsTarget && typeof MutationObserver === 'function') {
+\t\t\tobserver = new MutationObserver(function() {
+\t\t\t\tpatchLinks(document);
+\t\t\t});
+\t\t\tobserver.observe(obsTarget, { childList: true, subtree: true });
+\t\t\twindow.setTimeout(function() {
+\t\t\t\tif (observer) {
+\t\t\t\t\tobserver.disconnect();
+\t\t\t\t\tobserver = null;
+\t\t\t\t}
+\t\t\t}, 10000);
+\t\t}
+
+\t\tif (ui && ui.menu && typeof ui.menu.load === 'function') {
+\t\t\tui.menu.load().then(function() {
+\t\t\t\twindow.setTimeout(function() {
+\t\t\t\t\tif (patchLinks(document) && observer) {
+\t\t\t\t\t\tobserver.disconnect();
+\t\t\t\t\t\tobserver = null;
+\t\t\t\t\t}
+\t\t\t\t}, 0);
+\t\t\t}).catch(function() {});
+\t\t}
+\t}
+});
+"""
+with open(preload_path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(preload_js)
 EOPY
 
 chmod +x package/luci-app-modemwebui/etc/init.d/modemwebui package/luci-app-modemwebui/etc/hotplug.d/iface/99-modemwebui package/luci-app-modemwebui/usr/bin/webuiserver
@@ -283,6 +609,32 @@ if os.path.exists(ucode_sms):
     uc_text = uc_text.replace(old_uc, new_uc, 1)
     with open(ucode_sms, "w", encoding="utf-8", newline="\n") as f:
         f.write(uc_text)
+
+# 4. qmodem modem_hook.sh: reload modemwebui after post_init updates at_port (before exec qmodem-settings)
+modem_hook = "feeds/qmodem/application/qmodem/files/usr/share/qmodem/modem_hook.sh"
+with open(modem_hook, "r", encoding="utf-8", newline="") as f:
+    hook_text = f.read().replace("\r\n", "\n")
+old_hook = (
+    "    post_init)\n"
+    "        # pre-add at commands\n"
+    '        cfg_prefix="post_init"\n'
+    '        debug_subject="post_init"\n'
+    "\t\tif [ -x /usr/sbin/qmodem-settings ]; then\n"
+)
+new_hook = (
+    "    post_init)\n"
+    "        # pre-add at commands\n"
+    '        cfg_prefix="post_init"\n'
+    '        debug_subject="post_init"\n'
+    "        if [ -x /etc/init.d/modemwebui ] && { /etc/init.d/modemwebui enabled 2>/dev/null || [ -L /etc/rc.d/S99modemwebui ]; }; then\n"
+    "            (/etc/init.d/modemwebui reload </dev/null >/dev/null 2>&1) &\n"
+    "        fi\n"
+    "\t\tif [ -x /usr/sbin/qmodem-settings ]; then\n"
+)
+assert old_hook in hook_text, f"Target post_init block not found in {modem_hook}"
+hook_text = hook_text.replace(old_hook, new_hook, 1)
+with open(modem_hook, "w", encoding="utf-8", newline="\n") as f:
+    f.write(hook_text)
 EOPY
 
 # 2.6 Build-time Base System Defaults (LAN IP 192.168.88.1, root password root, Wi-Fi password 198198ko)
