@@ -538,6 +538,134 @@ patch_file(
     '"tom_modem -c \'%s\' -d \'%s\' -b %d 2>/dev/null"',
     '"tom_modem -u -c \'%s\' -d \'%s\' -b %d 2>/dev/null"',
 )
+patch_file(
+    "package/smsforward/smsforward.c",
+    r"""// HTTP POST通用函数 - 使用wget替代libcurl（节省2-3MB内存）
+int send_http_post(const char *url, const char *json_data, char *response_buffer) {
+    FILE *fp;
+    char *cmd;
+    int result;
+    size_t cmd_size;
+    
+    // 动态分配命令缓冲区
+    cmd_size = strlen(url) + strlen(json_data) + 256;
+    cmd = malloc(cmd_size);
+    if (!cmd) {
+        return -1;
+    }
+    
+    // 构建wget命令
+    snprintf(cmd, cmd_size,
+        "wget --post-data='%s' "
+        "--header='Content-Type: application/json' "
+        "--timeout=10 --tries=1 -4 -q -O- '%s' 2>/dev/null",
+        json_data, url);
+    
+    // 执行命令
+    fp = popen(cmd, "r");
+    free(cmd);
+    
+    if (!fp) {
+        return -1;
+    }
+    
+    // 读取响应
+    if (response_buffer) {
+        size_t n = fread(response_buffer, 1, 2047, fp);
+        response_buffer[n] = '\0';
+    }
+    
+    result = pclose(fp);
+    return (result == 0) ? 0 : -1;
+}""",
+    r"""// HTTP POST通用函数 - 使用curl替代wget(uclient-fetch不支持--tries)并通过临时文件传参防止单引号破坏JSON
+int send_http_post(const char *url, const char *json_data, char *response_buffer) {
+    char tmp_path[] = "/tmp/smsfwd_XXXXXX";
+    char drain[256];
+    int tmp_fd;
+    size_t len, written = 0;
+    char *cmd;
+    size_t cmd_size;
+    FILE *fp;
+    int result;
+
+    if (!url || !json_data || strchr(url, '\'')) {
+        return -1;
+    }
+
+    tmp_fd = mkstemp(tmp_path);
+    if (tmp_fd < 0) {
+        return -1;
+    }
+
+    len = strlen(json_data);
+    while (written < len) {
+        ssize_t w = write(tmp_fd, json_data + written, len - written);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            close(tmp_fd);
+            unlink(tmp_path);
+            return -1;
+        }
+        written += (size_t)w;
+    }
+    close(tmp_fd);
+
+    cmd_size = strlen(url) + sizeof(tmp_path) + 192;
+    cmd = malloc(cmd_size);
+    if (!cmd) {
+        unlink(tmp_path);
+        return -1;
+    }
+
+    snprintf(cmd, cmd_size,
+        "curl -fsSL -4 --connect-timeout 10 --max-time 15 "
+        "-H 'Content-Type: application/json' "
+        "--data-binary '@%s' '%s' 2>/dev/null",
+        tmp_path, url);
+
+    fp = popen(cmd, "r");
+    free(cmd);
+
+    if (!fp) {
+        unlink(tmp_path);
+        return -1;
+    }
+
+    if (response_buffer) {
+        size_t n = fread(response_buffer, 1, 2047, fp);
+        response_buffer[n] = '\0';
+    }
+    while (fread(drain, 1, sizeof(drain), fp) > 0) {}
+
+    result = pclose(fp);
+    unlink(tmp_path);
+    return (result == 0) ? 0 : -1;
+}""",
+)
+patch_file(
+    "package/smsforward/smsforward.c",
+    r"""        // 先获取短信存储数量（快速检查）
+        int storage_count = -1;
+        if (get_sms_storage_count(resolved_port, &storage_count) != 0) {
+            printf("获取存储数量失败，跳过本轮。\n");
+            sleep(13);
+            continue;
+        }""",
+    r"""        // 先获取短信存储数量（快速检查）
+        int storage_count = -1;
+        if (get_sms_storage_count(resolved_port, &storage_count) != 0) {
+            char new_port[64];
+            if (resolve_at_port(new_port, sizeof(new_port)) == 0 && strcmp(new_port, resolved_port) != 0) {
+                printf("检测到串口变更: %s -> %s，自动切换。\n", resolved_port, new_port);
+                snprintf(resolved_port, sizeof(resolved_port), "%s", new_port);
+                continue;
+            }
+            printf("获取存储数量失败，跳过本轮。\n");
+            sleep(13);
+            continue;
+        }""",
+)
 EOPY
 
 chmod +x package/luci-app-smsforward/root/etc/init.d/smsforward
