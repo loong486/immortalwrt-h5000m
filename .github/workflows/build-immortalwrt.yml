@@ -151,6 +151,7 @@ jobs:
         echo "  - \`luci-app-mosdns\` (MosDNS v5 高性能无污染 DNS 分流与防泄漏)" >> release.txt
         echo "  - \`luci-app-adguardhome\` + \`adguardhome\` (AdGuard Home 全网广告与追踪拦截 DNS 服务)" >> release.txt
         echo "  - \`luci-app-upnp\` (MiniUPnPd nftables 端口映射)" >> release.txt
+        echo "  - 内置优化：TCP BBR (\`kmod-tcp-bbr\`) + 4 核 Packet Steering + xHCI USB 3.0 降噪补丁 + Wi-Fi 7 \`sae-mixed\` + AGH 内存软上限 (\`150MiB\`)" >> release.txt
         echo "- **Default Access**: LAN IP \`192.168.88.1\` | Root 密码 \`root\` | Wi-Fi 密码 \`198198ko\`" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 

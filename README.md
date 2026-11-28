@@ -110,7 +110,7 @@
 1. 从 GitHub 仓库的 **[Releases](https://github.com/loong486/immortalwrt-h5000m/releases)** 页面下载最新的 `sysupgrade.bin` 固件包。
 2. 进入路由器后台：**系统 → 备份/升级 → 刷写固件**。
 3. 上传固件包，**勾选“保留配置”**，确认刷写。
-4. > **提示**：固件内置了自动化迁移清理脚本（`99-cleanup-legacy`），首次启动会自动清理旧版 `at-webserver`（`/www/5700`）、`momo`、`openlist`、`frpc` 等残留文件与过期 feed 源、应用默认接入参数（`192.168.88.1` / `root` / Wi-Fi 密码 `198198ko`）及禁用硬件加速流控（防止 MT5700M USB CDC NAT 断流），同时保留您的 PassWall / MosDNS / AdGuard Home 等核心业务配置。
+4. > **提示**：固件内置了自动化迁移清理脚本（`99-cleanup-legacy`），首次启动会自动清理旧版 `at-webserver`（`/www/5700`）、`momo`、`openlist`、`frpc`、`haproxy` 等残留文件与过期 feed 源、启用 4 核 Packet Steering 与 Wi-Fi 7 `sae-mixed`、为 AdGuard Home 预置 `150MiB` 内存软上限与局域网零限速、禁用硬件加速流控（防止 MT5700M USB CDC NAT 断流），同时**保留您已修改的后台/Wi-Fi 密码**（仅在空密码时补齐默认 `root` / `198198ko`）及 PassWall / MosDNS / AdGuard Home 等核心业务配置。
 
 ### 3. 全新安装 (不保留配置)
 首次从官方原厂固件或其他第三方固件切换时，建议取消勾选“保留配置”进行全新刷写，以获得最纯净稳定的运行环境。
@@ -169,7 +169,8 @@ immortalwrt-h5000m/
 ├── config/
 │   └── h5000m.config                 # H5000M 固件编译种子配置文件
 ├── patches/
-│   └── h5000m-userspace-fan-control.patch # 设备树 DTS 用户态智能温控补丁
+│   ├── 990-xhci-quiet-unknown-event-37.patch # xHCI USB 3.0 刷屏日志降噪内核补丁
+│   └── h5000m-userspace-fan-control.patch    # 设备树 DTS 用户态智能温控补丁
 ├── scripts/
 │   ├── diy-part1.sh                  # 编译前阶段：自定义 Feed 软件源注册
 │   └── diy-part2.sh                  # 编译中阶段：插件拉取、版本覆盖与迁移注入

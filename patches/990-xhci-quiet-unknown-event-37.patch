@@ -1,0 +1,11 @@
+--- a/drivers/usb/host/xhci-ring.c
++++ b/drivers/usb/host/xhci-ring.c
+@@ -3072,6 +3072,8 @@
+ 	default:
+ 		if (trb_type >= TRB_VENDOR_DEFINED_LOW)
+ 			handle_vendor_event(xhci, event, trb_type);
++		else if (trb_type == 37)
++			xhci_dbg(xhci, "Ignoring harmless xHCI event type %d\n", trb_type);
+ 		else
+ 			xhci_warn(xhci, "ERROR unknown event type %d\n", trb_type);
+ 	}

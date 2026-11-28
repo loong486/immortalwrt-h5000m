@@ -49,7 +49,7 @@ mkdir -p files/etc/uci-defaults
 cat << 'EOF' > files/etc/uci-defaults/99-cleanup-legacy
 #!/bin/sh
 rm -rf /tmp/luci-modulecache /tmp/luci-indexcache*
-for svc in at-webserver momo openlist frpc; do
+for svc in at-webserver momo openlist frpc haproxy; do
     if [ -x "/etc/init.d/${svc}" ]; then
         "/etc/init.d/${svc}" stop >/dev/null 2>&1 || true
         "/etc/init.d/${svc}" disable >/dev/null 2>&1 || true
@@ -59,6 +59,11 @@ rm -f /etc/init.d/at-webserver /etc/rc.d/*at-webserver* /etc/config/at-webserver
 rm -f /etc/init.d/momo /etc/rc.d/*momo* /etc/config/momo
 rm -f /etc/init.d/openlist /etc/rc.d/*openlist* /etc/config/openlist
 rm -f /etc/init.d/frpc /etc/rc.d/*frpc* /etc/config/frpc
+rm -f /etc/init.d/haproxy /etc/rc.d/*haproxy* /etc/haproxy.cfg
+if [ -x /etc/init.d/microsocks ] && [ "$(uci -q get microsocks.@microsocks[0].enabled || uci -q get microsocks.config.enabled || echo 0)" != "1" ]; then
+    /etc/init.d/microsocks stop >/dev/null 2>&1 || true
+    /etc/init.d/microsocks disable >/dev/null 2>&1 || true
+fi
 rm -rf /www/5700 /etc/momo /var/log/momo /var/run/momo /etc/openlist /var/run/openlist
 if uci -q get firewall.momo >/dev/null 2>&1; then
     uci -q delete firewall.momo
@@ -69,27 +74,44 @@ rm -rf /etc/honk /usr/lib/debug/boot/vmlinux
 rm -f /etc/apk/repositories.d/daeuniverse.list /etc/apk/keys/daeuniverse.pem
 sed -i '/qmodem/d;/video/d;/momo/d;/mosdns/d;/daeuniverse/d' /etc/apk/repositories.d/*.list /etc/apk/repositories 2>/dev/null
 
-# 1. Default LAN IP = 192.168.88.1
-uci -q set network.lan.ipaddr='192.168.88.1'
-uci -q set network.lan.netmask='255.255.255.0'
+# 1. Default LAN IP = 192.168.88.1 (only if unset or stock 192.168.1.1) & enable 4-core Packet Steering
+cur_lan_ip=$(uci -q get network.lan.ipaddr)
+if [ -z "$cur_lan_ip" ] || [ "$cur_lan_ip" = "192.168.1.1" ]; then
+    uci -q set network.lan.ipaddr='192.168.88.1'
+    uci -q set network.lan.netmask='255.255.255.0'
+fi
+if [ -z "$(uci -q get network.globals.packet_steering)" ]; then
+    uci -q set network.globals.packet_steering='1'
+fi
 uci -q commit network
 
-# 2. Default root password = root
-printf "root\nroot\n" | passwd root >/dev/null 2>&1 || true
+# 2. Default root password = root (only if unset/locked; preserve custom password on sysupgrade)
+root_hash=$(awk -F: '$1=="root"{print $2}' /etc/shadow 2>/dev/null)
+if [ -z "$root_hash" ] || [ "$root_hash" = "!" ] || [ "$root_hash" = "*" ]; then
+    printf "root\nroot\n" | passwd root >/dev/null 2>&1 || true
+fi
 
-# 3. Unified Wi-Fi password = 198198ko across all existing wifi-iface sections
+# 3. Wi-Fi 7 WPA2/WPA3 (sae-mixed) default & preserve custom Wi-Fi password on sysupgrade
 for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
     dev=$(uci -q get "wireless.${s}.device")
     band=$(uci -q get "wireless.${dev}.band")
+    htmode=$(uci -q get "wireless.${dev}.htmode")
     enc=$(uci -q get "wireless.${s}.encryption")
+    cur_key=$(uci -q get "wireless.${s}.key")
     if [ -z "$enc" ] || [ "$enc" = "none" ] || [ "$enc" = "owe" ]; then
         if [ "$band" = "6g" ]; then
             uci -q set "wireless.${s}.encryption=sae"
         else
-            uci -q set "wireless.${s}.encryption=psk2"
+            uci -q set "wireless.${s}.encryption=sae-mixed"
         fi
+    elif [ "$enc" = "psk2" ]; then
+        case "$htmode" in
+            EHT*) uci -q set "wireless.${s}.encryption=sae-mixed" ;;
+        esac
     fi
-    uci -q set "wireless.${s}.key=198198ko"
+    if [ -z "$cur_key" ]; then
+        uci -q set "wireless.${s}.key=198198ko"
+    fi
     uci -q set "wireless.${s}.disabled=0"
 done
 uci -q commit wireless
@@ -115,6 +137,22 @@ fi
 if [ -f /etc/config/sms_forwarder ]; then
     uci -q set sms_forwarder.sms_forward.enable='0'
     uci -q commit sms_forwarder
+fi
+
+# 6. AdGuardHome memory guard (GOGC=50, GOMEMLIMIT=150MiB) & remove default 20 QPS LAN ratelimit
+if [ -f /etc/config/adguardhome ]; then
+    agh_gc=$(uci -q get adguardhome.config.gc)
+    agh_mem=$(uci -q get adguardhome.config.memlimit)
+    if [ -z "$agh_gc" ] || [ "$agh_gc" = "0" ]; then
+        uci -q set adguardhome.config.gc='50'
+    fi
+    if [ -z "$agh_mem" ] || [ "$agh_mem" = "0" ]; then
+        uci -q set adguardhome.config.memlimit='157286400'
+    fi
+    uci -q commit adguardhome
+fi
+if [ -f /etc/adguardhome/adguardhome.yaml ]; then
+    sed -i 's/^  ratelimit: 20$/  ratelimit: 0/' /etc/adguardhome/adguardhome.yaml
 fi
 exit 0
 EOF
@@ -790,17 +828,17 @@ assert replaced_shadow, f"root: line not found in {shadow_path}"
 with open(shadow_path, "w", encoding="utf-8", newline="\n") as f:
     f.writelines(new_lines)
 
-# 2. Unified Wi-Fi defaults (psk2 / sae on 6g, key = 198198ko)
+# 2. Unified Wi-Fi defaults (sae-mixed / sae on 6g, key = 198198ko)
 mac80211_path = "package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
 with open(mac80211_path, "r", encoding="utf-8", newline="") as f:
     mac_text = f.read()
 
 replacements = [
     ("encryption = 'owe';", "encryption = 'sae';"),
-    ("encryption = 'none';", "encryption = 'psk2';"),
+    ("encryption = 'none';", "encryption = 'sae-mixed';"),
     (
         "set ${si}.encryption='${defaults?.encryption || encryption}'",
-        "set ${si}.encryption='${band_name == \"6g\" ? \"sae\" : \"psk2\"}'",
+        "set ${si}.encryption='${band_name == \"6g\" ? \"sae\" : \"sae-mixed\"}'",
     ),
     (
         "set ${si}.key='${defaults?.key || \"\"}'",
@@ -847,6 +885,23 @@ fi
 if [ -n "${PATCH_FILE}" ]; then
     echo "Applying DTS patch from ${PATCH_FILE}..."
     patch -p1 < "${PATCH_FILE}" || echo "Warning: Patch already applied or failed"
+fi
+
+# 4.1 Install xHCI kernel patch to silence harmless MT5700M USB 3.0 event type 37 log spam
+XHCI_PATCH=""
+if [ -f "${PROJECT_DIR}/patches/990-xhci-quiet-unknown-event-37.patch" ]; then
+    XHCI_PATCH="${PROJECT_DIR}/patches/990-xhci-quiet-unknown-event-37.patch"
+elif [ -f "../patches/990-xhci-quiet-unknown-event-37.patch" ]; then
+    XHCI_PATCH="../patches/990-xhci-quiet-unknown-event-37.patch"
+fi
+
+if [ -n "${XHCI_PATCH}" ]; then
+    echo "Installing xHCI kernel patch from ${XHCI_PATCH}..."
+    mkdir -p target/linux/mediatek/patches-6.12
+    cp "${XHCI_PATCH}" target/linux/mediatek/patches-6.12/990-xhci-quiet-unknown-event-37.patch || exit 1
+else
+    echo "Error: 990-xhci-quiet-unknown-event-37.patch not found" >&2
+    exit 1
 fi
 
 # 5. Fix unquoted PATH in golang-package.mk to prevent shell syntax errors
