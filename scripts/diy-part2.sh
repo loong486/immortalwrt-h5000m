@@ -6,7 +6,7 @@
 
 # ── User-configurable version ───────────────────────────────────
 # Change this single variable to upgrade sing-box in future builds
-SING_BOX_VERSION="1.14.4"
+SING_BOX_VERSION="1.14.6"
 # ────────────────────────────────────────────────────────────────
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -137,6 +137,10 @@ fi
 if [ -f /etc/config/sms_forwarder ]; then
     uci -q set sms_forwarder.sms_forward.enable='0'
     uci -q commit sms_forwarder
+fi
+if [ -x /etc/init.d/sms_forwarder ]; then
+    /etc/init.d/sms_forwarder stop >/dev/null 2>&1 || true
+    /etc/init.d/sms_forwarder disable >/dev/null 2>&1 || true
 fi
 
 # 6. AdGuardHome memory guard (GOGC=50, GOMEMLIMIT=150MiB) & remove default 20 QPS LAN ratelimit
@@ -884,7 +888,14 @@ fi
 
 if [ -n "${PATCH_FILE}" ]; then
     echo "Applying DTS patch from ${PATCH_FILE}..."
-    patch -p1 < "${PATCH_FILE}" || echo "Warning: Patch already applied or failed"
+    if patch --dry-run -R -p1 -s < "${PATCH_FILE}" >/dev/null 2>&1; then
+        echo "DTS patch already applied, skipping."
+    else
+        patch -p1 < "${PATCH_FILE}" || { echo "Error: Failed to apply DTS patch ${PATCH_FILE}" >&2; exit 1; }
+    fi
+else
+    echo "Error: h5000m-userspace-fan-control.patch not found" >&2
+    exit 1
 fi
 
 # 4.1 Install xHCI kernel patch to silence harmless MT5700M USB 3.0 event type 37 log spam

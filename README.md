@@ -26,7 +26,7 @@
 * **现代化组件全套重构**：
   - 模组控制彻底拥抱 **QModem 现代总线架构**，解决传统私有脚本抢占串口导致的掉线问题。
   - 核心代理与 DNS 分流采用成熟稳定的 **PassWall + MosDNS v5**（双核集成 `Xray` 与 `sing-box 1.14+`），Real-IP 无污染解析与 `nftables` 高速透明分流无缝配合。
-* **编译速度极致精简**：剥离重型交叉编译工具链（如 `llvm-bpf` 与巨型 Go 模块），将 GitHub Actions 云端编译时间由原本的 50+ 分钟大幅压缩至 **15~20 分钟**。
+* **云端编译提速与自动清理**：预置官方预编译 `llvm-bpf` 工具链，并启用 `dl/` 源码包与 `ccache` 增量缓存加速构建（冷编译约 60~80 分钟，命中缓存后大幅缩短）；CI 自动保留最新 8 个 Release 版本防止历史包堆积。
 * **平滑升级与配置继承**：内建迁移清理脚本，支持无缝“保留配置升级”，升级固件后原有 Wi-Fi、代理订阅与基础网络设置不丢失。
 
 ---
@@ -75,8 +75,9 @@
 * **MosDNS v5 ([sbwml/luci-app-mosdns](https://github.com/sbwml/luci-app-mosdns))**：集成带 `adblock_set` 与缓存预取增强补丁的 `mosdns 5.3.4` + `geo2txt`，实现国内外 Real-IP 精准分流解析、防 DNS 污染/泄漏及 IPv6 `AAAA` 按需过滤，开关代理无需清理 FakeIP 缓存。
 * 预置 `zoneinfo-asia` 时区数据库，确保 Go 核心程序日志时间与 `Asia/Shanghai` 完全一致。
 
-### 5. 🛡️ AdGuard Home 全网过滤与端口映射
+### 5. 🛡️ AdGuard Home 全网过滤、端口映射与 KMS
 * **AdGuard Home (`luci-app-adguardhome` + `adguardhome`)**：集成 ImmortalWrt 官方最新 AdGuard Home v0.107+，提供全网 DNS 广告拦截、追踪器屏蔽与可视化查询日志。默认处于关闭状态以避免与 `dnsmasq` / `MosDNS` 抢占 `53` 端口；需要启用时可在 **服务 → AdGuard Home** 中配置并打开初始化向导（`:3000`）按需对接 DNS 端口。
+* **KMS 激活服务器 (`luci-app-vlmcsd` + `vlmcsd`)**：内置局域网 KMS 自动激活服务（`:1688`），支持 Windows / Office 批量授权版一键激活与自动续期。
 * **MiniUPnPd (nftables)**：完美适配 Firewall4，游戏主机与下载工具端口自动映射。
 
 ---
@@ -92,8 +93,9 @@
 | **短信自动转发** | `luci-app-smsforward` / `smsforward` | snowflakexuehui | [snowflakexuehui/luci-app-smsforward](https://github.com/snowflakexuehui/luci-app-smsforward) | 独立 C 语言多通道短信监听与自动推送转发插件 |
 | **网络代理** | `luci-app-passwall` | Openwrt-Passwall | [Openwrt-Passwall/openwrt-passwall](https://github.com/Openwrt-Passwall/openwrt-passwall) | 基于 nftables 的全功能透明分流代理 |
 | **DNS 分流** | `luci-app-mosdns` / `mosdns` | sbwml / IrineSistiana | [sbwml/luci-app-mosdns](https://github.com/sbwml/luci-app-mosdns) | MosDNS v5 无污染国内外 DNS 分流与广告过滤 |
-| **代理内核** | `xray-core` / `sing-box` (v1.14.4) | XTLS / SagerNet | [XTLS/Xray-core](https://github.com/XTLS/Xray-core) • [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 双核心现代全协议代理引擎 |
+| **代理内核** | `xray-core` / `sing-box` (v1.14.6) | XTLS / SagerNet | [XTLS/Xray-core](https://github.com/XTLS/Xray-core) • [SagerNet/sing-box](https://github.com/SagerNet/sing-box) | 双核心现代全协议代理引擎 |
 | **DNS 广告拦截** | `luci-app-adguardhome` / `adguardhome` | AdguardTeam / ImmortalWrt | [AdguardTeam/AdGuardHome](https://github.com/AdguardTeam/AdGuardHome) | 全网 DNS 广告与追踪器过滤拦截服务 |
+| **KMS 服务** | `luci-app-vlmcsd` / `vlmcsd` | Wind4 / ImmortalWrt | [Wind4/vlmcsd](https://github.com/Wind4/vlmcsd) | 局域网 Windows / Office KMS 自动激活服务 (`:1688`) |
 | **端口映射** | `miniupnpd-nftables` | Thomas Bernard | [miniupnp/miniupnp](https://github.com/miniupnp/miniupnp) | Firewall4 原生 UPnP IGD 映射服务 |
 
 ---
@@ -110,7 +112,7 @@
 1. 从 GitHub 仓库的 **[Releases](https://github.com/loong486/immortalwrt-h5000m/releases)** 页面下载最新的 `sysupgrade.bin` 固件包。
 2. 进入路由器后台：**系统 → 备份/升级 → 刷写固件**。
 3. 上传固件包，**勾选“保留配置”**，确认刷写。
-4. > **提示**：固件内置了自动化迁移清理脚本（`99-cleanup-legacy`），首次启动会自动清理旧版 `at-webserver`（`/www/5700`）、`momo`、`openlist`、`frpc`、`haproxy` 等残留文件与过期 feed 源、启用 4 核 Packet Steering 与 Wi-Fi 7 `sae-mixed`、为 AdGuard Home 预置 `150MiB` 内存软上限与局域网零限速、禁用硬件加速流控（防止 MT5700M USB CDC NAT 断流），同时**保留您已修改的后台/Wi-Fi 密码**（仅在空密码时补齐默认 `root` / `198198ko`）及 PassWall / MosDNS / AdGuard Home 等核心业务配置。
+4. > **提示**：固件内置了自动化迁移清理脚本（`99-cleanup-legacy`），首次启动会自动清理旧版 `at-webserver`（`/www/5700`）、`momo`、`openlist`、`frpc`、`haproxy` 等残留文件与过期 feed 源、停用冗余的旧版 `sms_forwarder` 后台、启用 4 核 Packet Steering 与 Wi-Fi 7 `sae-mixed`、为 AdGuard Home 预置 `150MiB` 内存软上限与局域网零限速、禁用硬件加速流控（防止 MT5700M USB CDC NAT 断流），同时**保留您已修改的后台/Wi-Fi 密码**（仅在空密码时补齐默认 `root` / `198198ko`）及 PassWall / MosDNS / AdGuard Home 等核心业务配置。
 
 ### 3. 全新安装 (不保留配置)
 首次从官方原厂固件或其他第三方固件切换时，建议取消勾选“保留配置”进行全新刷写，以获得最纯净稳定的运行环境。
@@ -153,7 +155,7 @@
 ### 2. 升级与调整 sing-box 核心版本
 如需体验未来最新发布的 sing-box，仅需修改 [`scripts/diy-part2.sh`](scripts/diy-part2.sh) 第 9 行：
 ```bash
-SING_BOX_VERSION="1.14.4"  # 直接修改为您需要的版本号
+SING_BOX_VERSION="1.14.6"  # 直接修改为您需要的版本号
 ```
 提交代码后，GitHub Actions 将会自动以指定版本完成拉取与编译。
 
